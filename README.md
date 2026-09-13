@@ -7,21 +7,22 @@
 
 ---
 
-## 📌 Навигатор по документации
+## 🧭 Быстрая навигация для разработчиков и ИИ-агентов
 
-| Раздел | Файл | Описание |
+> **Для ИИ-агентов и LLM**: Чтобы не тратить лишние токены на вычитку больших файлов, используйте главный индекс-маршрутизатор:
+> ### ➡️ [docs/ROUTER.md](docs/ROUTER.md) (Содержит inline-константы и условия чтения)
+
+| Раздел | Файл | Описание и назначение |
 |---|---|---|
-| 📜 **Главные правила** | [CONSTITUTION.md](CONSTITUTION.md) | Незыблемые правила, дисквалификационные факторы, SLA скорости и чистота данных. |
-| 📋 **Требования** | [docs/requirements/01_functional_spec.md](docs/requirements/01_functional_spec.md) | Детальная функциональная спецификация: форматы входа/выхода, маски номеров, типы знаков. |
-| ⚡ **Железо и SLA** | [docs/requirements/02_hardware_and_speed.md](docs/requirements/02_hardware_and_speed.md) | Ограничения скорости (<100мс), референсный ПК жюри (GTX 1050 Ti, 4GB), работа офлайн. |
-| 📊 **Датасет** | [docs/requirements/03_dataset_spec.md](docs/requirements/03_dataset_spec.md) | Спецификация реальных и синтетических данных, структура каталогов, формат `meta.csv`. |
-| 🏆 **Сдача и оценка** | [docs/requirements/04_deliverables_and_grading.md](docs/requirements/04_deliverables_and_grading.md) | Состав артефактов для сдачи, критерии проверки, структура пояснительной записки. |
-| 🏗️ **Архитектура пайплайна** | [docs/architecture/01_pipeline_overview.md](docs/architecture/01_pipeline_overview.md) | Общая схема работы: Детектор $\to$ Выравнивание (Quad) $\to$ Классификация $\to$ OCR $\to$ Валидация. |
-| 📐 **Детекция и геометрия** | [docs/architecture/02_detection_and_quad_rectification.md](docs/architecture/02_detection_and_quad_rectification.md) | Поиск пластины, предсказание 4 угловых точек и перспективное выпрямление. |
-| 🔍 **OCR и классификация** | [docs/architecture/03_ocr_and_classification.md](docs/architecture/03_ocr_and_classification.md) | Распознавание однострочных (1, 1Б) и двухстрочных (1А) номеров, архитектуры LPRNet / CRNN. |
-| 🎨 **Генератор синтетики** | [docs/architecture/04_synthetic_generator_spec.md](docs/architecture/04_synthetic_generator_spec.md) | Скрипт генерации $\ge 5000$ синтетических номеров по ГОСТ с аугментациями и random seed. |
-| ⚖️ **Лицензии и приватность** | [docs/data/01_sources_and_licensing.md](docs/data/01_sources_and_licensing.md) | Легальные источники данных, размытие лиц, лицензия CC BY 4.0. |
-| 🚀 **План и майлстоуны** | [docs/workflow/milestones_and_action_plan.md](docs/workflow/milestones_and_action_plan.md) | Пошаговый план реализации проекта от начала до сдачи. |
+| 🧭 **Главный маршрутизатор** | [docs/ROUTER.md](docs/ROUTER.md) | **Точка входа для ИИ**: карта знаний с inline-константами. |
+| 📜 **Конституция проекта** | [CONSTITUTION.md](CONSTITUTION.md) | Незыблемые правила, запреты олимпиады, дисквалификационные риски. |
+| 📐 **ГОСТ-геометрия** | [docs/specs/01_gost_geometry.md](docs/specs/01_gost_geometry.md) | Размеры пластин (мм, px), цвета (HEX), отступы, шрифт ГОСТ 50577. |
+| 🔤 **Маска и алфавит** | [docs/specs/02_plate_mask_regex.md](docs/specs/02_plate_mask_regex.md) | 12 букв, маски номеров, regex-валидатор, правила подстановки `#`. |
+| ⏱️ **Железо и SLA** | [docs/specs/03_hardware_latency_budget.md](docs/specs/03_hardware_latency_budget.md) | Бюджет времени (<100мс), GTX 1050 Ti (4GB VRAM), i5-7600. |
+| 📊 **Квоты и схема данных** | [docs/specs/04_dataset_quotas_schema.md](docs/specs/04_dataset_quotas_schema.md) | Квоты (150/50, 300/100, 5000+), 10 столбцов `meta.csv`, блюр лиц. |
+| 🎯 **Метрики оценки** | [docs/specs/05_evaluation_metrics.md](docs/specs/05_evaluation_metrics.md) | Sequence Accuracy, CER, штрафы за ложный класс `other`. |
+| 🌐 **Расширяемость** | [docs/specs/06_extensibility_design.md](docs/specs/06_extensibility_design.md) | Обоснование расширения архитектуры на СНГ (BY, KZ, AM) и спецвиды. |
+| 📝 **Пояснительная записка** | [docs/report/01_explanatory_note_draft.md](docs/report/01_explanatory_note_draft.md) | 5-страничный отчет для жюри по разделам задания. |
 
 ---
 
