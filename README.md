@@ -1,4 +1,7 @@
-# VolgaIT 2026: Распознавание нестандартных ГРЗ (Полуфинал)
+# OmniPlate-RU: Распознавание нестандартных ГРЗ (Volga IT 2026)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Dataset License: CC BY 4.0](https://img.shields.io/badge/Dataset%20License-CC%20BY%204.0-lightgrey.svg)](dataset/LICENSE)
 
 Репозиторий решения задачи полуфинала олимпиады **Volga IT 2026** по дисциплине **«Искусственный интеллект и анализ данных»** (куратор: **АИС Город**).
 
