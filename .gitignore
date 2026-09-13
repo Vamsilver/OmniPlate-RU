@@ -62,3 +62,5 @@ dataset/images/real/*
 !dataset/images/real/.gitkeep
 dataset/images/synthetic/*
 !dataset/images/synthetic/.gitkeep
+dataset/labels/synth_*
+!dataset/labels/.gitkeep
