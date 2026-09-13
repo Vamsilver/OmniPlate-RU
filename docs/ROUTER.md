@@ -26,6 +26,7 @@ CSV_HEADER: "image;plate_num;plate_type;confidence"
 
 | File | Topic & Key Inlined Constants | Read Condition (When to open) |
 |---|---|---|
+| [MASTER_PLAN.md](../MASTER_PLAN.md) | **Global Project Roadmap**: Checklists, 5 stages, subtasks, criteria, current progress. | Open to verify next steps or update task completion status. |
 | [CONSTITUTION.md](../CONSTITUTION.md) | **Inviolable Rules**: Zero-score conditions, offline ban, CC BY 4.0, face blur, test set isolation. | Open before submission or when validating project constraints. |
 | [specs/01_gost_geometry.md](specs/01_gost_geometry.md) | **GOST Dimensions**: <br>• `type1`: 520×112 mm (4.64:1)<br>• `type1a`: 290×170 mm (1.70:1, 2-line)<br>• `type1b`: 520×112 mm, Yellow `#FFCC00`<br>• Font: GOST 50577-2018 | Open ONLY when implementing synthetic plate renderer or homography canonical sizes. |
 | [specs/02_plate_mask_regex.md](specs/02_plate_mask_regex.md) | **Plate Mask & Parsing**: <br>• Mask: `[L][D][D][D][L][L][REGION]`<br>• Region: 2 or 3 digits (3-digit starts with 1, 2, 7)<br>• Unreadable char: `#`<br>• Output: Uppercase Latin | Open ONLY when writing OCR post-processor, regex validator, or CTC decoder. |
