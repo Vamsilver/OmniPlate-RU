@@ -1,0 +1,15 @@
+﻿{
+    "search.exclude":  {
+                           "**/.idea":  true,
+                           "**/.vs":  true,
+                           "**/graphify-out":  true,
+                           "**/.git":  true
+                       },
+    "files.watcherExclude":  {
+                                 "**/.idea/**":  true,
+                                 "**/.git/objects/**":  true,
+                                 "**/graphify-out/**":  true,
+                                 "**/.vs/**":  true,
+                                 "**/.git/subtree-cache/**":  true
+                             }
+}
