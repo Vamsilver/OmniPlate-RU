@@ -113,7 +113,8 @@ class PlateAugmentor:
         # Sensor noise
         if random.random() < 0.4:
             arr = np.array(img).astype(np.float32)
-            noise = np.random.normal(0, random.uniform(3, 10), arr.shape)
+            noise = np.empty(arr.shape, dtype=np.float32)
+            cv2.randn(noise, 0, random.uniform(3, 10))
             arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
             img = Image.fromarray(arr)
 
