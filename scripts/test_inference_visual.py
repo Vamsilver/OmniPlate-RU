@@ -89,7 +89,7 @@ def main():
     parser.add_argument("--output_dir", type=str, default="test_output", help="Directory to save visual results")
     parser.add_argument("--device", type=str, default="cuda", help="Inference device: 'cuda' or 'cpu'")
     parser.add_argument("--conf", type=float, default=0.45, help="Detector confidence threshold (default: 0.45)")
-    parser.add_argument("--limit", type=int, default=6, help="Max sample images to evaluate")
+    parser.add_argument("--limit", type=int, default=10, help="Max sample images to evaluate")
     args = parser.parse_args()
 
     print("=" * 65)

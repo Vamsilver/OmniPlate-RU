@@ -133,16 +133,59 @@ class OmniPlatePipeline:
         if bw > img_w * 0.35 or bh > img_h * 0.25:
             return False
 
-        # 2. Aspect Ratio (Width / Height) rejection
+        # 2. Border edge rejection: highway guardrails / road cuts right at frame top edge
+        if by <= 2 and bw > 250:
+            return False
+
+        # 3. Aspect Ratio (Width / Height) rejection based on physical GOST R 50577-2018
         ar = bw / float(bh)
         if plate_type in ("type1", "type1b"):
-            # Single-line plates: physical AR = 4.64. Perspective allowable: 2.0 to 6.5
-            if ar < 2.0 or ar > 6.5:
+            # Single-line plates: physical AR = 520 / 112 = 4.64.
+            # Allow perspective foreshortening in range [2.40, 5.80]
+            if ar < 2.40 or ar > 5.80:
                 return False
         elif plate_type == "type1a":
-            # Two-line square plate: physical AR = 1.70. Perspective allowable: 0.9 to 2.4
-            if ar < 0.9 or ar > 2.4:
+            # Two-line square plate: physical AR = 290 / 170 = 1.706.
+            # Allow perspective foreshortening in range [1.15, 2.15]
+            if ar < 1.15 or ar > 2.15:
                 return False
+        elif plate_type == "other":
+            # Other (trailers, motorcycles, square / rectangular): [0.90, 5.80]
+            if ar < 0.90 or ar > 5.80:
+                return False
+
+        return True
+
+    @staticmethod
+    def validate_quad_geometry(
+        quad: Sequence[float],
+        bbox: Tuple[int, int, int, int],
+    ) -> bool:
+        """
+        Verifies that the 4 quad corners form a valid, convex, non-collapsed quadrilateral
+        that reasonably fills the bounding box.
+        """
+        if len(quad) != 8:
+            return False
+
+        bx, by, bw, bh = bbox
+        pts = np.array(quad, dtype=np.float32).reshape(4, 2)
+
+        # 1. Convexity check (plate is a planar convex polygon in 3D perspective)
+        pts_int = pts.astype(np.int32)
+        if not cv2.isContourConvex(pts_int):
+            return False
+
+        # 2. Polygon area vs BBox area fill ratio
+        poly_area = cv2.contourArea(pts)
+        bbox_area = float(bw * bh)
+        if bbox_area <= 0:
+            return False
+
+        fill_ratio = poly_area / bbox_area
+        # A valid perspective projection of a rectangle fills at least 50% of its AABB
+        if fill_ratio < 0.50 or fill_ratio > 1.05:
+            return False
 
         return True
 
@@ -203,6 +246,10 @@ class OmniPlatePipeline:
 
             kpts = kpts_list[i] if kpts_list is not None and i < len(kpts_list) else None
             quad = self._extract_quad(kpts, bbox, iw, ih)
+
+            # Apply quad polygon convexity and fill validation (kills collapsed/skewed background noise)
+            if not self.validate_quad_geometry(quad, bbox):
+                continue
 
             detections.append(
                 PlateDetection(

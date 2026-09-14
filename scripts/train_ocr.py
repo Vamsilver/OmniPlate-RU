@@ -77,10 +77,12 @@ class PlateCropDataset(Dataset):
                 img_rel, plate_num, p_type, bbox_str, quad_str, is_veh, is_syn, src, lic, cond = row[:10]
                 if p_type not in ("type1", "type1a", "type1b"):
                     continue
-                # Reject unreadable / wildcards for strict training
-                if "#" in plate_num:
-                    continue
-                if len(plate_num) not in (8, 9):
+                # Data Integrity: ONLY train OCR on samples with verified ground-truth text!
+                # All synthetic samples (is_syn == '1') have 100% accurate rendered text.
+                # Real reference samples (ref_real_*) have verified labels.
+                # All other real images have auto-generated pseudo-labels for detector bboxes and MUST NOT be used for OCR!
+                is_verified = (is_syn == "1") or img_rel.startswith("images/real/ref_real_")
+                if not is_verified:
                     continue
 
                 all_samples.append({
