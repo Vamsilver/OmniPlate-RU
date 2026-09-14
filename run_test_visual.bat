@@ -1,4 +1,7 @@
 @echo off
+chcp 65001 >nul
+set PYTHONIOENCODING=utf-8
+set PYTHONUTF8=1
 title Volga IT 2026 - Visual Inference Smoke Test
 cd /d D:\AIProjects\VolgaIT
 echo ========================================================

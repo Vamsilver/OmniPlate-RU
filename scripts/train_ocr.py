@@ -392,7 +392,7 @@ def train_ocr(args):
             dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
             dynamo=False,
         )
-        print(f"✅ ONNX Export Successful: {onnx_path}")
+        print(f"[SUCCESS] ONNX Export Successful: {onnx_path}")
     except TypeError:
         torch.onnx.export(
             model,
@@ -405,9 +405,9 @@ def train_ocr(args):
             output_names=["output"],
             dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
         )
-        print(f"✅ ONNX Export Successful: {onnx_path}")
+        print(f"[SUCCESS] ONNX Export Successful: {onnx_path}")
     except Exception as e:
-        print(f"⚠️ ONNX Export error: {e}")
+        print(f"[ERROR] ONNX Export error: {e}")
 
     # Validate ONNX runtime load
     try:
@@ -415,9 +415,9 @@ def train_ocr(args):
         test_sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
         test_inp = np.random.randn(1, 3, 36, 160).astype(np.float32)
         test_out = test_sess.run(None, {test_sess.get_inputs()[0].name: test_inp})
-        print(f"🧪 ONNX Runtime Validation: PASS (Output shape: {test_out[0].shape})")
+        print(f"[PASS] ONNX Runtime Validation: PASS (Output shape: {test_out[0].shape})")
     except Exception as e:
-        print(f"ℹ️ ONNX Runtime notice: {e}")
+        print(f"[INFO] ONNX Runtime notice: {e}")
 
 
 if __name__ == "__main__":

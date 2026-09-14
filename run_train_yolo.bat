@@ -1,4 +1,7 @@
 @echo off
+chcp 65001 >nul
+set PYTHONIOENCODING=utf-8
+set PYTHONUTF8=1
 title VolgaIT - Train YOLO-Pose Detector on RTX 5080 (100 Epochs)
 cd /d D:\AIProjects\VolgaIT
 
@@ -11,7 +14,7 @@ echo.
 echo ========================================================
 echo Starting YOLO-Pose Training on RTX 5080 (100 Epochs)
 echo ========================================================
-.venv\Scripts\python.exe -u scripts\training\train_yolo_pose.py --epochs 100 --batch 32 --workers 8 --patience 25 2>&1 | powershell -command "$input | Tee-Object -FilePath train_yolo.log"
+.venv\Scripts\python.exe -u scripts\training\train_yolo_pose.py --epochs 100 --batch 32 --workers 8 --patience 25 2>&1 | powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $input | Tee-Object -FilePath train_yolo.log"
 
 echo.
 echo ========================================================

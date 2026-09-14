@@ -11,6 +11,12 @@ import shutil
 import sys
 import time
 import torch
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True, encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(line_buffering=True, encoding="utf-8", errors="replace")
+
 sys.path.insert(0, os.path.dirname(__file__))
 from ultralytics import YOLO
 
