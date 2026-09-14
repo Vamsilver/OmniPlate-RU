@@ -141,21 +141,57 @@ class PlateCropDataset(Dataset):
         else:
             crop = self._extract_crop(item)
 
-        # Light data augmentation during training
+        # Heavy photorealistic data augmentation during training
         if self.is_train:
-            if random.random() < 0.3:
-                # Random brightness / contrast
-                alpha = 1.0 + random.uniform(-0.25, 0.25)
-                beta = random.uniform(-20, 20)
-                crop = cv2.convertScaleAbs(crop, alpha=alpha, beta=beta)
-            if random.random() < 0.2:
-                # Slight blur
+            h, w = crop.shape[:2]
+
+            # 1. Motion blur or Gaussian blur (camera shake, vehicle movement)
+            if random.random() < 0.25:
+                k = random.choice([3, 5, 7])
+                kernel = np.zeros((k, k), dtype=np.float32)
+                kernel[k // 2, :] = 1.0 / k
+                crop = cv2.filter2D(crop, -1, kernel)
+            elif random.random() < 0.20:
                 k = random.choice([3, 5])
                 crop = cv2.GaussianBlur(crop, (k, k), 0)
-            if random.random() < 0.15:
-                # Random noise
-                noise = np.random.randint(-15, 15, crop.shape, dtype=np.int16)
-                crop = np.clip(crop.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+
+            # 2. Lighting & Contrast jitter
+            if random.random() < 0.35:
+                alpha = random.uniform(0.70, 1.35)
+                beta = random.uniform(-25, 25)
+                crop = cv2.convertScaleAbs(crop, alpha=alpha, beta=beta)
+
+            # 3. HSV hue / saturation shift (sodium street lamps, sunsets, shadows)
+            if random.random() < 0.30:
+                hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV).astype(np.float32)
+                hsv[:, :, 0] = (hsv[:, :, 0] + random.uniform(-8, 8)) % 180
+                hsv[:, :, 1] = np.clip(hsv[:, :, 1] * random.uniform(0.75, 1.25), 0, 255)
+                crop = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
+            # 4. Sensor noise (Gaussian + salt/pepper)
+            if random.random() < 0.25:
+                noise = np.random.normal(0, random.uniform(4, 16), crop.shape).astype(np.float32)
+                crop = np.clip(crop.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+
+            # 5. Bolt holes & road dirt blotches (dark circles/ellipses)
+            if random.random() < 0.30:
+                num_spots = random.randint(1, 3)
+                for _ in range(num_spots):
+                    cx = random.randint(10, w - 10)
+                    cy = random.randint(5, h - 5)
+                    rx = random.randint(2, 5)
+                    ry = random.randint(2, 4)
+                    color = (random.randint(25, 65), random.randint(25, 65), random.randint(25, 65))
+                    cv2.ellipse(crop, (cx, cy), (rx, ry), random.randint(0, 180), 0, 360, color, -1)
+
+            # 6. Perspective perturbation (small yaw/pitch warping)
+            if random.random() < 0.25:
+                dx = random.uniform(-3, 3)
+                dy = random.uniform(-2, 2)
+                pts1 = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
+                pts2 = np.float32([[dx, dy], [w - dx, -dy], [w + dx, h + dy], [-dx, h - dy]])
+                M = cv2.getPerspectiveTransform(pts1, pts2)
+                crop = cv2.warpPerspective(crop, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
 
         # Preprocess: RGB and normalize to [0, 1]
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
@@ -232,6 +268,15 @@ def train_ocr(args):
     os.makedirs(args.output_dir, exist_ok=True)
     best_acc = 0.0
     best_ckpt_path = os.path.join(args.output_dir, "ocr_lprnet_best.pt")
+
+    if args.resume and os.path.exists(best_ckpt_path):
+        try:
+            ckpt = torch.load(best_ckpt_path, map_location=device)
+            model.load_state_dict(ckpt["state_dict"])
+            best_acc = float(ckpt.get("best_acc", 0.0))
+            print(f"[*] Resumed weights from {best_ckpt_path} (previous best acc: {best_acc:.2f}%)")
+        except Exception as e:
+            print(f"[!] Warning: Could not resume from checkpoint: {e}")
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -384,6 +429,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3, help="Initial learning rate")
     parser.add_argument("--workers", type=int, default=0, help="DataLoader workers (0 recommended with RAM cache)")
     parser.add_argument("--no_cache", action="store_true", help="Disable RAM pre-caching")
+    parser.add_argument("--resume", action="store_true", help="Resume from existing best model checkpoint")
     parser.add_argument("--cpu", action="store_true", help="Force CPU execution")
     args = parser.parse_args()
 

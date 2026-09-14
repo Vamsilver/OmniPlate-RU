@@ -216,19 +216,17 @@ class CTCDecoder:
         chars = list(plate)
         norm_type = plate_type.lower().strip()
 
-        if norm_type == "type1b":
-            # Type 1B: Yellow single-line plate (e.g., AH88977)
-            # Format: LL DDD DD (7 chars) or LL DDD DDD (8 chars)
-            if len(chars) not in (7, 8):
-                return plate
-
-            # Expected Letter positions: 0, 1
+        # Check if type1b is in classic bus format (LL DDD DD / LL DDD DDD):
+        # In classic bus, chars[4] and chars[5] must be digits (e.g. AH88977)
+        c4_digit = len(chars) > 5 and (chars[4].isdigit() or chars[4] in LETTER_TO_DIGIT)
+        c5_digit = len(chars) > 5 and (chars[5].isdigit() or chars[5] in LETTER_TO_DIGIT)
+        if norm_type == "type1b" and len(chars) in (7, 8) and c4_digit and c5_digit:
+            # Classic Bus format: LL DDD DD (7 chars) or LL DDD DDD (8 chars)
             for pos in (0, 1):
                 c = chars[pos]
                 if c in DIGIT_TO_LETTER:
                     chars[pos] = DIGIT_TO_LETTER[c]
 
-            # Expected Digit positions: 2, 3, 4, and 5..end
             digit_positions = [2, 3, 4] + list(range(5, len(chars)))
             for pos in digit_positions:
                 c = chars[pos]
@@ -237,22 +235,23 @@ class CTCDecoder:
 
             return "".join(chars)
 
-        # Standard Type 1 and Type 1A:
-        if len(plate) not in (8, 9):
-            return plate
+        # Standard Unified GOST / Competition format (Type 1, Type 1A, and Competition Type 1B):
+        # Format: L DDD LL RR (8 or 9 chars)
+        if len(chars) in (8, 9):
+            # Expected Letter positions: 0, 4, 5
+            for pos in (0, 4, 5):
+                c = chars[pos]
+                if c in DIGIT_TO_LETTER:
+                    chars[pos] = DIGIT_TO_LETTER[c]
 
-        # Expected Letter positions: 0, 4, 5
-        for pos in (0, 4, 5):
-            c = chars[pos]
-            if c in DIGIT_TO_LETTER:
-                chars[pos] = DIGIT_TO_LETTER[c]
+            # Expected Digit positions: 1, 2, 3, and 6..end
+            digit_positions = [1, 2, 3] + list(range(6, len(chars)))
+            for pos in digit_positions:
+                c = chars[pos]
+                if c in LETTER_TO_DIGIT:
+                    chars[pos] = LETTER_TO_DIGIT[c]
 
-        # Expected Digit positions: 1, 2, 3, and 6..end
-        digit_positions = [1, 2, 3] + list(range(6, len(plate)))
-        for pos in digit_positions:
-            c = chars[pos]
-            if c in LETTER_TO_DIGIT:
-                chars[pos] = LETTER_TO_DIGIT[c]
+            return "".join(chars)
 
         return "".join(chars)
 

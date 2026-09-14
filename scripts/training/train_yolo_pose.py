@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--workers", type=int, default=8, help="Dataloader workers (default: 8)")
     parser.add_argument("--patience", type=int, default=25, help="Early stopping patience (default: 25)")
     parser.add_argument("--device", type=str, default=None, help="Device (default: 0 if cuda else cpu)")
+    parser.add_argument("--lr0", type=float, default=0.01, help="Initial learning rate (default: 0.01)")
     parser.add_argument("--resume_best", action="store_true", help="Fine-tune from existing detector_yolo_pose_best.pt")
     args = parser.parse_args()
 
@@ -69,6 +70,7 @@ def main():
         exist_ok=True,
         save=True,
         patience=args.patience,
+        lr0=args.lr0,
         verbose=True,
     )
     total_time = time.time() - start_time

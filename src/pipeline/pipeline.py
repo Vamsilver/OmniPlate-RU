@@ -138,20 +138,19 @@ class OmniPlatePipeline:
             return False
 
         # 3. Aspect Ratio (Width / Height) rejection based on physical GOST R 50577-2018
+        # Calibrated to accommodate perspective yaw/pitch angles in real scenes
         ar = bw / float(bh)
         if plate_type in ("type1", "type1b"):
-            # Single-line plates: physical AR = 520 / 112 = 4.64.
-            # Allow perspective foreshortening in range [2.40, 5.80]
-            if ar < 2.40 or ar > 5.80:
+            # Single-line plates: physical AR ~ 4.64. Perspective foreshortening: [1.80, 6.50]
+            if ar < 1.80 or ar > 6.50:
                 return False
         elif plate_type == "type1a":
-            # Two-line square plate: physical AR = 290 / 170 = 1.706.
-            # Allow perspective foreshortening in range [1.15, 2.15]
-            if ar < 1.15 or ar > 2.15:
+            # Two-line square plate: physical AR ~ 1.706. Extreme perspective angles: [0.75, 3.80]
+            if ar < 0.75 or ar > 3.80:
                 return False
         elif plate_type == "other":
-            # Other (trailers, motorcycles, square / rectangular): [0.90, 5.80]
-            if ar < 0.90 or ar > 5.80:
+            # Other (trailers, motorcycles, square / rectangular): [0.70, 6.50]
+            if ar < 0.70 or ar > 6.50:
                 return False
 
         return True
