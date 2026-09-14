@@ -1,10 +1,11 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 YOLO-Pose Training Script for Volga IT 2026.
 Trains YOLOv8n-pose / YOLO11n-pose on NVIDIA RTX 5080 with CUDA acceleration.
 Outputs best model checkpoint and exports to ONNX for <= 100 ms inference.
 """
 
+import argparse
 import os
 import shutil
 import sys
@@ -15,12 +16,22 @@ from ultralytics import YOLO
 
 
 def main():
+    parser = argparse.ArgumentParser(description="YOLO-Pose Detector Training")
+    parser.add_argument("--epochs", type=int, default=100, help="Training epochs (default: 100)")
+    parser.add_argument("--batch", type=int, default=32, help="Batch size (default: 32)")
+    parser.add_argument("--imgsz", type=int, default=640, help="Image size (default: 640)")
+    parser.add_argument("--workers", type=int, default=8, help="Dataloader workers (default: 8)")
+    parser.add_argument("--patience", type=int, default=25, help="Early stopping patience (default: 25)")
+    parser.add_argument("--device", type=str, default=None, help="Device (default: 0 if cuda else cpu)")
+    parser.add_argument("--resume_best", action="store_true", help="Fine-tune from existing detector_yolo_pose_best.pt")
+    args = parser.parse_args()
+
     print("=" * 65)
-    print("  Volga IT 2026 - YOLO-Pose Plate & Quad Detector Training")
+    print(f"  Volga IT 2026 - YOLO-Pose Plate & Quad Detector Training ({args.epochs} Epochs)")
     print("=" * 65)
 
     has_cuda = torch.cuda.is_available()
-    device = "0" if has_cuda else "cpu"
+    device = args.device if args.device is not None else ("0" if has_cuda else "cpu")
 
     print(f"PyTorch Version: {torch.__version__}")
     print(f"CUDA Available:  {has_cuda}")
@@ -35,27 +46,33 @@ def main():
         from prepare_yolo_dataset import prepare_yolo_pose
         prepare_yolo_pose("dataset")
 
-    print(f"\n[*] Initializing YOLOv8 nano pose backbone...")
-    model = YOLO("yolov8n-pose.pt")
+    initial_weights = "yolov8n-pose.pt"
+    if args.resume_best and os.path.exists("models/detector_yolo_pose_best.pt"):
+        initial_weights = "models/detector_yolo_pose_best.pt"
+        print(f"[*] Resuming from existing weights: {initial_weights}")
+    else:
+        print(f"[*] Initializing fresh YOLOv8 nano pose backbone: {initial_weights}")
+
+    model = YOLO(initial_weights)
 
     start_time = time.time()
-    print(f"[*] Starting training on {device}...")
+    print(f"[*] Starting training on device {device} ({args.epochs} epochs, batch={args.batch})...")
     results = model.train(
         data=data_yaml,
-        epochs=30,
-        imgsz=640,
-        batch=32,
+        epochs=args.epochs,
+        imgsz=args.imgsz,
+        batch=args.batch,
         device=device,
-        workers=8,
+        workers=args.workers,
         project="models",
         name="yolo_pose_run",
         exist_ok=True,
         save=True,
-        patience=10,
-        verbose=True
+        patience=args.patience,
+        verbose=True,
     )
     total_time = time.time() - start_time
-    print(f"\n[+] Training completed in {total_time:.1f}s!")
+    print(f"\n[+] Training completed in {total_time:.1f}s ({total_time / 60.0:.2f} min)!")
 
     best_pt = os.path.join("models", "yolo_pose_run", "weights", "best.pt")
     target_pt = os.path.join("models", "detector_yolo_pose_best.pt")
@@ -68,7 +85,7 @@ def main():
         # Export to ONNX
         print("[*] Exporting model to ONNX for low-latency inference...")
         best_model = YOLO(target_pt)
-        onnx_file = best_model.export(format="onnx", imgsz=640, dynamic=False, simplify=True)
+        onnx_file = best_model.export(format="onnx", imgsz=args.imgsz, dynamic=False, simplify=True)
         target_onnx = os.path.join("models", "detector_yolo_pose.onnx")
         if os.path.exists(onnx_file) and onnx_file != target_onnx:
             shutil.copy(onnx_file, target_onnx)

@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
 Zero-Copy YOLO-Pose Dataset Preparation for Volga IT 2026.
-Reads dataset annotations, prepares labels in dataset/labels/synthetic,
-creates stratified train/val splits, and generates ultralytics YOLO-pose data.yaml.
+Reads dataset annotations, prepares labels in dataset/labels/synthetic and dataset/labels/real,
+creates stratified train/val splits across both synthetic and real images,
+and generates ultralytics YOLO-pose data.yaml.
 """
 
 import argparse
 import csv
+import glob
 import os
 import random
 import sys
 from typing import Dict, List
+from PIL import Image
 
 
-def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
+def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.15, seed: int = 42):
     random.seed(seed)
 
     meta_path = os.path.join(dataset_dir, "meta.csv")
@@ -22,62 +25,82 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
         sys.exit(1)
 
     pose_dir = os.path.join(dataset_dir, "yolo_pose")
-    pose_synth_labels_dir = os.path.join(dataset_dir, "labels", "synthetic")
     os.makedirs(pose_dir, exist_ok=True)
-    os.makedirs(pose_synth_labels_dir, exist_ok=True)
+
+    # Clean existing Ultralytics .cache files so it re-indexes freshly
+    for cache_f in glob.glob(os.path.join(dataset_dir, "**", "*.cache"), recursive=True):
+        try:
+            os.remove(cache_f)
+            print(f"[*] Removed stale cache: {cache_f}")
+        except Exception:
+            pass
 
     class_map = {"type1": 0, "type1a": 1, "type1b": 2, "other": 3}
 
-    samples_by_class: Dict[str, List[Dict]] = {k: [] for k in class_map.keys()}
+    # Group samples by (plate_type, is_synthetic) for balanced stratification
+    strata: Dict[str, List[Dict]] = {}
 
     with open(meta_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f, delimiter=";")
         for row in reader:
             p_type = row.get("plate_type")
+            if p_type not in class_map:
+                continue
             is_syn = row.get("is_synthetic", "0")
-            # Strict synthetic-first strategy: train YOLO strictly on verified synthetic plates
-            # + negative background samples to suppress false positives on background objects
-            if is_syn == "1" and p_type in ("type1", "type1a", "type1b"):
-                samples_by_class[p_type].append(row)
-            elif p_type == "other":
-                # Include negative background samples
-                samples_by_class["other"].append(row)
+            key = f"{p_type}_{is_syn}"
+            if key not in strata:
+                strata[key] = []
+            strata[key].append(row)
 
     train_rows = []
     val_rows = []
 
-    for p_type, rows in samples_by_class.items():
+    print("\nDataset Stratification:")
+    for stratum_key, rows in sorted(strata.items()):
         random.shuffle(rows)
-        n_val = int(len(rows) * val_ratio)
-        val_rows.extend(rows[:n_val])
-        train_rows.extend(rows[n_val:])
+        n_val = max(1, int(len(rows) * val_ratio)) if len(rows) > 5 else 0
+        val_subset = rows[:n_val]
+        train_subset = rows[n_val:]
+        val_rows.extend(val_subset)
+        train_rows.extend(train_subset)
+        print(f"  - {stratum_key:<12}: Total={len(rows):<5} -> Train={len(train_subset):<5} | Val={len(val_subset):<4}")
 
-    print(f"Total samples: {len(train_rows) + len(val_rows)}")
+    print(f"\nTotal samples: {len(train_rows) + len(val_rows)}")
     print(f"Train split:   {len(train_rows)}")
     print(f"Val split:     {len(val_rows)}")
 
-    # Process each sample to generate standard YOLO-pose labels
+    # Generate standard YOLO-pose labels for each image
     count = 0
+    real_count = 0
+    synth_count = 0
+
     for row in train_rows + val_rows:
         img_rel = row["image"]
         base_name = os.path.splitext(os.path.basename(img_rel))[0]
         p_type = row["plate_type"]
+        cls_id = class_map[p_type]
+        is_syn = row.get("is_synthetic", "0")
 
-        # Ensure label directory corresponds to image subdirectory (labels/synthetic or labels/real)
+        # Determine label path: images/real/xxx.jpg -> labels/real/xxx.txt
         subdir = os.path.dirname(img_rel).replace("images", "labels")
         target_dir = os.path.join(dataset_dir, subdir)
         os.makedirs(target_dir, exist_ok=True)
         target_label_path = os.path.join(target_dir, f"{base_name}.txt")
 
+        # Negative sample (other) -> empty label file teaches YOLO zero false positives
         if p_type == "other":
-            # Negative background sample (no plate) -> empty file teaches YOLO zero false positives
             with open(target_label_path, "w", encoding="utf-8") as wf:
                 pass
             count += 1
+            if is_syn == "1":
+                synth_count += 1
+            else:
+                real_count += 1
             continue
 
+        # Check if precomputed raw label exists (for synthetic)
         raw_label_path = os.path.join(dataset_dir, "labels", f"{base_name}.txt")
-        if os.path.exists(raw_label_path):
+        if os.path.exists(raw_label_path) and is_syn == "1":
             with open(raw_label_path, "r", encoding="utf-8") as rf:
                 line = rf.readline().strip()
                 tokens = line.split()
@@ -86,6 +109,49 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
                     with open(target_label_path, "w", encoding="utf-8") as wf:
                         wf.write(yolo_pose_str + "\n")
             count += 1
+            synth_count += 1
+            continue
+
+        # Parse bbox and quad from meta.csv
+        full_img_path = os.path.join(dataset_dir, img_rel)
+        if not os.path.exists(full_img_path):
+            continue
+
+        try:
+            with Image.open(full_img_path) as img:
+                img_w, img_h = img.size
+        except Exception:
+            continue
+
+        bbox_parts = [float(v.strip()) for v in row["bbox"].split(",")]
+        quad_parts = [float(v.strip()) for v in row["quad"].split(",")]
+
+        if len(bbox_parts) == 4 and len(quad_parts) == 8 and img_w > 0 and img_h > 0:
+            bx, by, bw, bh = bbox_parts
+            xc = min(1.0, max(0.0, (bx + bw / 2.0) / img_w))
+            yc = min(1.0, max(0.0, (by + bh / 2.0) / img_h))
+            wn = min(1.0, max(0.0, bw / img_w))
+            hn = min(1.0, max(0.0, bh / img_h))
+
+            # Quad 4 corners (tl, tr, br, bl)
+            kpts = []
+            for k in range(4):
+                px = min(1.0, max(0.0, quad_parts[k * 2] / img_w))
+                py = min(1.0, max(0.0, quad_parts[k * 2 + 1] / img_h))
+                kpts.extend([f"{px:.6f}", f"{py:.6f}"])
+
+            yolo_pose_str = f"{cls_id} {xc:.6f} {yc:.6f} {wn:.6f} {hn:.6f} " + " ".join(kpts)
+            with open(target_label_path, "w", encoding="utf-8") as wf:
+                wf.write(yolo_pose_str + "\n")
+            count += 1
+            if is_syn == "1":
+                synth_count += 1
+            else:
+                real_count += 1
+
+    # Shuffle train and val rows
+    random.shuffle(train_rows)
+    random.shuffle(val_rows)
 
     # Write train.txt and val.txt with forward-slashed absolute paths
     train_txt_path = os.path.join(pose_dir, "train.txt")
@@ -117,16 +183,16 @@ names:
     with open(data_yaml_path, "w", encoding="utf-8") as yf:
         yf.write(yaml_content)
 
-    print(f"\n[SUCCESS] Prepared {count} YOLO-pose labels in: {pose_synth_labels_dir}")
+    print(f"\n[SUCCESS] Prepared {count} YOLO-pose labels ({synth_count} synthetic, {real_count} real)")
     print(f"Manifest: {data_yaml_path}")
-    print(f"Train:    {train_txt_path}")
-    print(f"Val:      {val_txt_path}")
+    print(f"Train:    {train_txt_path} ({len(train_rows)} samples)")
+    print(f"Val:      {val_txt_path} ({len(val_rows)} samples)")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Prepare YOLO-Pose Dataset")
     parser.add_argument("--dataset_dir", type=str, default="dataset")
-    parser.add_argument("--val_ratio", type=float, default=0.2)
+    parser.add_argument("--val_ratio", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
