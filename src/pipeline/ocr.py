@@ -203,17 +203,47 @@ class CTCDecoder:
         return "".join(raw_chars)
 
     @staticmethod
-    def apply_gost_heuristics(plate: str) -> str:
+    def apply_gost_heuristics(plate: str, plate_type: str = "type1") -> str:
         """
         Applies position-aware character repair based on GOST R 50577-2018.
-        Plate formats:
-        - 8 chars: L D D D L L D D       (e.g., A123BC77)
-        - 9 chars: L D D D L L D D D     (e.g., A123BC777)
+        Supports:
+        - type1 / type1a: L D D D L L D D (8 chars) or L D D D L L D D D (9 chars)
+        - type1b: L L D D D D D (7 chars) or L L D D D D D D (8 chars)
         """
-        if len(plate) not in (8, 9):
+        if not plate:
             return plate
 
         chars = list(plate)
+        norm_type = plate_type.lower().strip()
+
+        if norm_type == "type1b":
+            # Type 1B: Yellow single-line plate (e.g., AH88977)
+            # Format: LL DDD DD (7 chars) or LL DDD DDD (8 chars)
+            if len(chars) not in (7, 8):
+                return plate
+
+            # Expected Letter positions: 0, 1
+            for pos in (0, 1):
+                c = chars[pos]
+                if c in DIGIT_TO_LETTER:
+                    chars[pos] = DIGIT_TO_LETTER[c]
+                elif c not in LETTERS and c != WILDCARD:
+                    chars[pos] = WILDCARD
+
+            # Expected Digit positions: 2, 3, 4, and 5..end
+            digit_positions = [2, 3, 4] + list(range(5, len(chars)))
+            for pos in digit_positions:
+                c = chars[pos]
+                if c in LETTER_TO_DIGIT:
+                    chars[pos] = LETTER_TO_DIGIT[c]
+                elif c not in DIGITS and c != WILDCARD:
+                    chars[pos] = WILDCARD
+
+            return "".join(chars)
+
+        # Standard Type 1 and Type 1A:
+        if len(plate) not in (8, 9):
+            return plate
 
         # Expected Letter positions: 0, 4, 5
         for pos in (0, 4, 5):
@@ -236,13 +266,13 @@ class CTCDecoder:
 
         # Verify 3-digit region prefix
         if len(repaired) == 9 and repaired[6] not in VALID_3DIGIT_STARTS:
-            # If start is invalid digit, flag or keep wildcard
             if repaired[6] != WILDCARD:
                 chars = list(repaired)
                 chars[6] = WILDCARD
                 repaired = "".join(chars)
 
         return repaired
+
 
 
 class PlateOCR:
@@ -302,7 +332,7 @@ class PlateOCR:
         tensor = np.transpose(tensor, (2, 0, 1))[np.newaxis, ...]
         return tensor
 
-    def predict_single(self, crop_bgr: np.ndarray) -> Tuple[str, float]:
+    def predict_single(self, crop_bgr: np.ndarray, plate_type: str = "type1") -> Tuple[str, float]:
         """
         Runs OCR on a single canonical crop.
         Returns:
@@ -330,10 +360,11 @@ class PlateOCR:
         best_probs = np.max(probs, axis=-1)
 
         raw_text = self.decoder.decode_greedy(best_indices, blank_idx=BLANK_IDX)
-        final_text = self.decoder.apply_gost_heuristics(raw_text)
+        final_text = self.decoder.apply_gost_heuristics(raw_text, plate_type=plate_type)
 
         # Confidence: average probability of non-blank aligned characters
         non_blank_probs = [best_probs[t] for t, idx in enumerate(best_indices) if idx != BLANK_IDX]
         confidence = float(np.mean(non_blank_probs)) if non_blank_probs else 0.0
 
         return final_text, confidence
+

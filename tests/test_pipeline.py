@@ -13,7 +13,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT_DIR)
 
 from src.pipeline.pipeline import OmniPlatePipeline, PlateDetection
-from src.pipeline.ocr import PlateOCR
+from src.pipeline.ocr import CTCDecoder, PlateOCR
 
 
 class DummyOCR:
@@ -21,11 +21,13 @@ class DummyOCR:
     def __init__(self):
         self.session = "mock_session"
         self.model = None
+        self.decoder = CTCDecoder()
 
-    def predict_single(self, crop: np.ndarray):
+    def predict_single(self, crop: np.ndarray, *args, **kwargs):
         # Assert canonical crop size (36, 160, 3)
         assert crop.shape == (36, 160, 3), f"Expected (36, 160, 3), got {crop.shape}"
         return "A123BC77", 0.95
+
 
 
 class TestOmniPlatePipeline(unittest.TestCase):

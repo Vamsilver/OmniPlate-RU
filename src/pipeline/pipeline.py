@@ -78,7 +78,7 @@ class OmniPlatePipeline:
         detector_path: Optional[str] = None,
         ocr_path: Optional[str] = None,
         device: str = "cuda",
-        conf_threshold: float = 0.25,
+        conf_threshold: float = 0.45,
         iou_threshold: float = 0.45,
         imgsz: int = 640,
         use_onnx: bool = True,
@@ -114,6 +114,107 @@ class OmniPlatePipeline:
             use_onnx=self.use_onnx,
         )
         self.detector = self._init_detector(self.detector_path)
+
+    @staticmethod
+    def validate_plate_geometry(
+        bbox: Tuple[int, int, int, int],
+        plate_type: str,
+        img_w: int,
+        img_h: int,
+    ) -> bool:
+        """
+        Rejects impossible detections based on physical GOST aspect ratios and camera scene scale.
+        """
+        bx, by, bw, bh = bbox
+
+        # 1. Extreme size rejection (plate cannot be smaller than 25x12 or larger than 35% of frame)
+        if bw < 25 or bh < 12:
+            return False
+        if bw > img_w * 0.35 or bh > img_h * 0.25:
+            return False
+
+        # 2. Aspect Ratio (Width / Height) rejection
+        ar = bw / float(bh)
+        if plate_type in ("type1", "type1b"):
+            # Single-line plates: physical AR = 4.64. Perspective allowable: 2.0 to 6.5
+            if ar < 2.0 or ar > 6.5:
+                return False
+        elif plate_type == "type1a":
+            # Two-line square plate: physical AR = 1.70. Perspective allowable: 0.9 to 2.4
+            if ar < 0.9 or ar > 2.4:
+                return False
+
+        return True
+
+    def detect(self, image: np.ndarray) -> List[PlateDetection]:
+        """
+        Runs plate detector on scene image.
+        Returns list of PlateDetection with bounding boxes and quads.
+        """
+        if self.detector is None:
+            return []
+
+        ih, iw = image.shape[:2]
+        results = self.detector.predict(
+            source=image,
+            imgsz=self.imgsz,
+            conf=self.conf_threshold,
+            iou=self.iou_threshold,
+            device=self.device,
+            verbose=False,
+        )
+
+        detections: List[PlateDetection] = []
+        if not results:
+            return detections
+
+        r = results[0]
+        boxes = r.boxes
+        if boxes is None or len(boxes) == 0:
+            return detections
+
+        xyxy = boxes.xyxy.cpu().numpy()
+        confs = boxes.conf.cpu().numpy()
+        classes = boxes.cls.cpu().numpy().astype(int)
+
+        kpts_list = None
+        if hasattr(r, "keypoints") and r.keypoints is not None:
+            try:
+                kpts_list = r.keypoints.xy.cpu().numpy()
+            except Exception:
+                kpts_list = None
+
+        for i in range(len(xyxy)):
+            box = xyxy[i]
+            x1, y1, x2, y2 = [int(round(v)) for v in box]
+            bx = max(0, min(iw - 1, x1))
+            by = max(0, min(ih - 1, y1))
+            bw = max(1, min(iw - bx, x2 - x1))
+            bh = max(1, min(ih - by, y2 - y1))
+            bbox = (bx, by, bw, bh)
+
+            cls_id = classes[i]
+            plate_type = self.CLASS_NAMES.get(cls_id, "type1")
+            conf = float(confs[i])
+
+            # Apply physical geometry filter (kills false positives on car panels, barriers, sky)
+            if not self.validate_plate_geometry(bbox, plate_type, iw, ih):
+                continue
+
+            kpts = kpts_list[i] if kpts_list is not None and i < len(kpts_list) else None
+            quad = self._extract_quad(kpts, bbox, iw, ih)
+
+            detections.append(
+                PlateDetection(
+                    bbox=bbox,
+                    quad=quad,
+                    plate_type=plate_type,
+                    confidence=conf,
+                )
+            )
+
+        return detections
+
 
     def _resolve_device(self, requested: str) -> str:
         """Checks CUDA availability; falls back to CPU if necessary."""
@@ -215,71 +316,6 @@ class OmniPlatePipeline:
 
         return self._fallback_quad_from_bbox(bbox)
 
-    def detect(self, image: np.ndarray) -> List[PlateDetection]:
-        """
-        Runs plate detector on scene image.
-        Returns list of PlateDetection with bounding boxes and quads.
-        """
-        if self.detector is None:
-            return []
-
-        ih, iw = image.shape[:2]
-        results = self.detector.predict(
-            source=image,
-            imgsz=self.imgsz,
-            conf=self.conf_threshold,
-            iou=self.iou_threshold,
-            device=self.device,
-            verbose=False,
-        )
-
-        detections: List[PlateDetection] = []
-        if not results:
-            return detections
-
-        r = results[0]
-        boxes = r.boxes
-        if boxes is None or len(boxes) == 0:
-            return detections
-
-        xyxy = boxes.xyxy.cpu().numpy()
-        confs = boxes.conf.cpu().numpy()
-        classes = boxes.cls.cpu().numpy().astype(int)
-
-        kpts_list = None
-        if hasattr(r, "keypoints") and r.keypoints is not None:
-            try:
-                kpts_list = r.keypoints.xy.cpu().numpy()
-            except Exception:
-                kpts_list = None
-
-        for i in range(len(xyxy)):
-            box = xyxy[i]
-            x1, y1, x2, y2 = [int(round(v)) for v in box]
-            bx = max(0, min(iw - 1, x1))
-            by = max(0, min(ih - 1, y1))
-            bw = max(1, min(iw - bx, x2 - x1))
-            bh = max(1, min(ih - by, y2 - y1))
-            bbox = (bx, by, bw, bh)
-
-            cls_id = classes[i]
-            plate_type = self.CLASS_NAMES.get(cls_id, "type1")
-            conf = float(confs[i])
-
-            kpts = kpts_list[i] if kpts_list is not None and i < len(kpts_list) else None
-            quad = self._extract_quad(kpts, bbox, iw, ih)
-
-            detections.append(
-                PlateDetection(
-                    bbox=bbox,
-                    quad=quad,
-                    plate_type=plate_type,
-                    confidence=conf,
-                )
-            )
-
-        return detections
-
     def recognize_single(
         self,
         image: np.ndarray,
@@ -310,16 +346,29 @@ class OmniPlatePipeline:
                 # Split top and bottom lines
                 top_line, bottom_line = self.rectifier.split_type1a(rectified)
 
-                # Stitch into single canonical 160x36 strip
+                # Approach A: Stitched horizontal strip (canonical format)
                 stitched = self.rectifier.stitch_type1a_horizontal(
                     top_line,
                     bottom_line,
                     target_size=(160, 36),
                 )
+                text_stitched, conf_stitched = self.ocr.predict_single(stitched, plate_type="type1a")
 
-                text, ocr_conf = self.ocr.predict_single(stitched)
-                detection.text = text
-                detection.ocr_confidence = ocr_conf
+                # Approach B: Line-by-line independent recognition
+                top_crop = cv2.resize(top_line, (160, 36), interpolation=cv2.INTER_LINEAR)
+                bot_crop = cv2.resize(bottom_line, (160, 36), interpolation=cv2.INTER_LINEAR)
+                t_top, c_top = self.ocr.predict_single(top_crop, plate_type="raw")
+                t_bot, c_bot = self.ocr.predict_single(bot_crop, plate_type="raw")
+                text_lines = self.ocr.decoder.apply_gost_heuristics((t_top + t_bot).strip(), plate_type="type1a")
+                conf_lines = (c_top + c_bot) / 2.0
+
+                # Select best candidate by confidence and validity
+                if len(text_lines) in (8, 9) and conf_lines >= conf_stitched:
+                    detection.text = text_lines
+                    detection.ocr_confidence = round(conf_lines, 4)
+                else:
+                    detection.text = text_stitched
+                    detection.ocr_confidence = round(conf_stitched, 4)
 
             else:
                 # Type 1 and Type 1B Single-Line Plates
@@ -330,7 +379,7 @@ class OmniPlatePipeline:
                 )
                 detection.rectified_crop = rectified
 
-                text, ocr_conf = self.ocr.predict_single(rectified)
+                text, ocr_conf = self.ocr.predict_single(rectified, plate_type=plate_type)
                 detection.text = text
                 detection.ocr_confidence = ocr_conf
 
@@ -340,6 +389,7 @@ class OmniPlatePipeline:
             detection.ocr_confidence = 0.0
 
         return detection
+
 
     def predict(
         self,

@@ -88,6 +88,7 @@ def main():
     parser.add_argument("--image", type=str, default=None, help="Path to single test image")
     parser.add_argument("--output_dir", type=str, default="test_output", help="Directory to save visual results")
     parser.add_argument("--device", type=str, default="cuda", help="Inference device: 'cuda' or 'cpu'")
+    parser.add_argument("--conf", type=float, default=0.45, help="Detector confidence threshold (default: 0.45)")
     parser.add_argument("--limit", type=int, default=6, help="Max sample images to evaluate")
     args = parser.parse_args()
 
@@ -99,7 +100,8 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize Pipeline
-    pipeline = OmniPlatePipeline(device=args.device)
+    pipeline = OmniPlatePipeline(device=args.device, conf_threshold=args.conf)
+
     print(f"[+] Pipeline initialized on {pipeline.device}")
     print(f"    - Detector: {pipeline.detector_path}")
     print(f"    - OCR:      {pipeline.ocr_path} (use_onnx={pipeline.use_onnx})")
