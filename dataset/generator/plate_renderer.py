@@ -1,8 +1,9 @@
-"""
+﻿"""
 Refined Plate Renderer with photorealistic base templates and exact character coordinates.
+Calibrated strictly to GOST R 50577-2018 dimensions and real physical references.
 Supports:
   - type1: Single-line white (1040x224 px)
-  - type1a: Two-line square white (580x340 px)
+  - type1a: Two-line square white (558x331 px) with authentic region compartment box
   - type1b: Single-line yellow (1040x224 px)
 All three conform to competition mask: [Letter][3 Digits][2 Letters][Region 2-3 Digits]
 """
@@ -10,6 +11,7 @@ All three conform to competition mask: [Letter][3 Digits][2 Letters][Region 2-3 
 import os
 import random
 from typing import Tuple
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -29,84 +31,32 @@ POPULAR_REGIONS = [
     "50", "90", "150", "190", "750", "790"
 ]
 
-ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 FONTS_DIR = os.path.join(os.path.dirname(__file__), "fonts")
 
 
-def get_square_1a_template() -> Image.Image:
-    """Generates clean high-res 580x340 square plate template for Type 1A"""
-    w, h = 580, 340
-    im = Image.new("RGB", (w, h), (248, 248, 248))
-    d = ImageDraw.Draw(im)
-
-    # Outer border & inner bevel
-    d.rounded_rectangle([6, 6, w - 7, h - 7], radius=24, outline=(15, 15, 15), width=8)
-    d.rounded_rectangle([18, 18, w - 19, h - 19], radius=16, outline=(230, 230, 230), width=3)
-
-    # RUS & Russian Flag at bottom-right
-    font_rus = ImageFont.truetype(os.path.join(FONTS_DIR, "arialbd.ttf"), 30)
-    d.text((473, 210), "RUS", font=font_rus, fill=(15, 15, 15))
-
-    # Flag 54x34
-    fx, fy, fw, fh = 472, 244, 54, 34
-    sh = fh // 3
-    d.rectangle([fx, fy, fx + fw, fy + sh], fill=(255, 255, 255))
-    d.rectangle([fx, fy + sh, fx + fw, fy + 2 * sh], fill=(0, 57, 166))
-    d.rectangle([fx, fy + 2 * sh, fx + fw, fy + fh], fill=(213, 43, 30))
-    d.rectangle([fx, fy, fx + fw, fy + fh], outline=(15, 15, 15), width=1)
-
-    # Mounting bolt holes
-    for bx, by in [(45, 170), (535, 170)]:
-        d.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(40, 40, 40), outline=(180, 180, 180), width=2)
-
-    return im
-
-
-def get_yellow_1b_template() -> Image.Image:
-    """Generates procedural Type 1B yellow template (1040x224 px) matching competition mask"""
-    w, h = 1040, 224
-    # Pantone 116C: RGB (255, 204, 0)
-    im = Image.new("RGB", (w, h), (255, 204, 0))
-    d = ImageDraw.Draw(im)
-
-    # Outer rounded border
-    d.rounded_rectangle([6, 6, w - 7, h - 7], radius=24, outline=(15, 15, 15), width=8)
-    d.rounded_rectangle([18, 18, w - 19, h - 19], radius=16, outline=(245, 195, 0), width=3)
-
-    # Vertical separator line matching Type 1 geometry
-    d.line([(675, 14), (675, h - 14)], fill=(15, 15, 15), width=6)
-
-    # RUS text
-    font_rus = ImageFont.truetype(os.path.join(FONTS_DIR, "arialbd.ttf"), 38)
-    d.text((765, 154), "RUS", font=font_rus, fill=(15, 15, 15))
-
-    # Mounting holes
-    for bx, by in [(40, 112), (1000, 112)]:
-        d.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(50, 40, 0), outline=(160, 130, 0), width=2)
-
-    return im
+def draw_char_exact(draw: ImageDraw.ImageDraw, char: str, x: int, y: int, font: ImageFont.FreeTypeFont, fill=(15, 15, 15)):
+    """Draws character aligned exactly to top-left of ink bounding box (x, y)."""
+    bx, by, _, _ = font.getbbox(char)
+    draw.text((x - bx, y - by), char, font=font, fill=fill)
 
 
 class PlateRenderer:
     def __init__(self):
         font_path = os.path.join(FONTS_DIR, "RoadNumbers2.0.ttf")
-        self.font_path = font_path
+        font_arial = os.path.join(FONTS_DIR, "arialbd.ttf")
 
-        # Load / construct templates
-        self.tpl_white_long = Image.open(os.path.join(ASSETS_DIR, "rus_white_long_lp.png")).convert("RGB").resize((1040, 224))
-        self.tpl_yellow_long = get_yellow_1b_template().convert("RGB")
-        self.tpl_square_1a = get_square_1a_template().convert("RGB")
+        # Type 1 & Type 1B fonts (1040x224)
+        self.font_main = ImageFont.truetype(font_path, 235)
+        self.font_reg_2 = ImageFont.truetype(font_path, 170)
+        self.font_reg_3 = ImageFont.truetype(font_path, 135)
+        self.font_rus_long = ImageFont.truetype(font_arial, 38)
 
-        # Fonts calibrated for 1040x224 long plates
-        self.font_long_digits = ImageFont.truetype(font_path, 135)
-        self.font_long_letters = ImageFont.truetype(font_path, 105)
-        self.font_long_region = ImageFont.truetype(font_path, 105)
-
-        # Fonts calibrated for 580x340 square 1A plates
-        self.font_1a_top_digits = ImageFont.truetype(font_path, 115)
-        self.font_1a_top_letter = ImageFont.truetype(font_path, 95)
-        self.font_1a_bot_letters = ImageFont.truetype(font_path, 95)
-        self.font_1a_region = ImageFont.truetype(font_path, 95)
+        # Type 1A fonts (558x331) - calibrated exactly to reference
+        self.font_1a_letter = ImageFont.truetype(font_path, 218)
+        self.font_1a_digit = ImageFont.truetype(font_path, 168)
+        self.font_1a_reg_2 = ImageFont.truetype(font_path, 128)
+        self.font_1a_reg_3 = ImageFont.truetype(font_path, 102)
+        self.font_1a_rus = ImageFont.truetype(font_arial, 25)
 
     @staticmethod
     def generate_random_plate_text() -> Tuple[str, str, str, str, str]:
@@ -124,31 +74,47 @@ class PlateRenderer:
             full_str = plate_num
             l1, d3, l2, reg = plate_num[0], plate_num[1:4], plate_num[4:6], plate_num[6:]
 
-        im = self.tpl_white_long.copy()
+        w, h = 1040, 224
+        im = Image.new("RGB", (w, h), (248, 248, 248))
         d = ImageDraw.Draw(im)
 
-        # Letter 1
-        d.text((65, 58), l1, font=self.font_long_letters, fill=(20, 20, 20))
+        # Borders
+        d.rounded_rectangle([6, 6, w - 7, h - 7], radius=24, outline=(15, 15, 15), width=8)
+        d.rounded_rectangle([18, 18, w - 19, h - 19], radius=16, outline=(230, 230, 230), width=3)
+        # Separator line
+        d.line([(770, 14), (770, h - 14)], fill=(15, 15, 15), width=6)
 
-        # Digits (3)
-        dx_start = 160
-        dx_spacing = 95
-        for i, digit in enumerate(d3):
-            d.text((dx_start + i * dx_spacing, 42), digit, font=self.font_long_digits, fill=(20, 20, 20))
+        # Bolt holes
+        for bx, by in [(45, 112), (1000, 112)]:
+            d.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(40, 40, 40), outline=(180, 180, 180), width=2)
 
-        # Letters 2 & 3
-        lx_start = 470
-        d.text((lx_start, 58), l2[0], font=self.font_long_letters, fill=(20, 20, 20))
-        d.text((lx_start + 90, 58), l2[1], font=self.font_long_letters, fill=(20, 20, 20))
+        # Characters
+        draw_char_exact(d, l1, 75, 68, self.font_main)
+        draw_char_exact(d, d3[0], 190, 34, self.font_main)
+        draw_char_exact(d, d3[1], 295, 34, self.font_main)
+        draw_char_exact(d, d3[2], 400, 34, self.font_main)
+        draw_char_exact(d, l2[0], 525, 68, self.font_main)
+        draw_char_exact(d, l2[1], 635, 68, self.font_main)
 
-        # Region Code
+        # Region
         if len(reg) == 2:
-            d.text((745, 38), reg[0], font=self.font_long_region, fill=(20, 20, 20))
-            d.text((830, 38), reg[1], font=self.font_long_region, fill=(20, 20, 20))
+            draw_char_exact(d, reg[0], 810, 25, self.font_reg_2)
+            draw_char_exact(d, reg[1], 900, 25, self.font_reg_2)
         else:
-            d.text((705, 38), reg[0], font=self.font_long_region, fill=(20, 20, 20))
-            d.text((780, 38), reg[1], font=self.font_long_region, fill=(20, 20, 20))
-            d.text((855, 38), reg[2], font=self.font_long_region, fill=(20, 20, 20))
+            draw_char_exact(d, reg[0], 780, 38, self.font_reg_3)
+            draw_char_exact(d, reg[1], 845, 38, self.font_reg_3)
+            draw_char_exact(d, reg[2], 910, 38, self.font_reg_3)
+
+        # RUS text
+        d.text((805, 155), "RUS", font=self.font_rus_long, fill=(15, 15, 15))
+
+        # Russian flag
+        fx, fy, fw, fh = 900, 155, 70, 36
+        sh = fh // 3
+        d.rectangle([fx, fy, fx + fw, fy + sh], fill=(255, 255, 255))
+        d.rectangle([fx, fy + sh, fx + fw, fy + 2 * sh], fill=(0, 57, 166))
+        d.rectangle([fx, fy + 2 * sh, fx + fw, fy + fh], fill=(213, 43, 30))
+        d.rectangle([fx, fy, fx + fw, fy + fh], outline=(15, 15, 15), width=1)
 
         return im, full_str
 
@@ -159,31 +125,38 @@ class PlateRenderer:
             full_str = plate_num
             l1, d3, l2, reg = plate_num[0], plate_num[1:4], plate_num[4:6], plate_num[6:]
 
-        im = self.tpl_yellow_long.copy()
+        w, h = 1040, 224
+        # Pantone 116C: RGB (255, 204, 0)
+        im = Image.new("RGB", (w, h), (255, 204, 0))
         d = ImageDraw.Draw(im)
 
-        # Letter 1
-        d.text((65, 58), l1, font=self.font_long_letters, fill=(20, 20, 20))
+        # Borders
+        d.rounded_rectangle([6, 6, w - 7, h - 7], radius=24, outline=(15, 15, 15), width=8)
+        d.rounded_rectangle([18, 18, w - 19, h - 19], radius=16, outline=(240, 190, 0), width=3)
+        d.line([(770, 14), (770, h - 14)], fill=(15, 15, 15), width=6)
 
-        # Digits (3)
-        dx_start = 160
-        dx_spacing = 95
-        for i, digit in enumerate(d3):
-            d.text((dx_start + i * dx_spacing, 42), digit, font=self.font_long_digits, fill=(20, 20, 20))
+        for bx, by in [(45, 112), (1000, 112)]:
+            d.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(50, 40, 0), outline=(180, 140, 0), width=2)
 
-        # Letters 2 & 3
-        lx_start = 470
-        d.text((lx_start, 58), l2[0], font=self.font_long_letters, fill=(20, 20, 20))
-        d.text((lx_start + 90, 58), l2[1], font=self.font_long_letters, fill=(20, 20, 20))
+        # Characters
+        draw_char_exact(d, l1, 75, 68, self.font_main)
+        draw_char_exact(d, d3[0], 190, 34, self.font_main)
+        draw_char_exact(d, d3[1], 295, 34, self.font_main)
+        draw_char_exact(d, d3[2], 400, 34, self.font_main)
+        draw_char_exact(d, l2[0], 525, 68, self.font_main)
+        draw_char_exact(d, l2[1], 635, 68, self.font_main)
 
-        # Region Code
+        # Region
         if len(reg) == 2:
-            d.text((745, 38), reg[0], font=self.font_long_region, fill=(20, 20, 20))
-            d.text((830, 38), reg[1], font=self.font_long_region, fill=(20, 20, 20))
+            draw_char_exact(d, reg[0], 810, 25, self.font_reg_2)
+            draw_char_exact(d, reg[1], 900, 25, self.font_reg_2)
         else:
-            d.text((705, 38), reg[0], font=self.font_long_region, fill=(20, 20, 20))
-            d.text((780, 38), reg[1], font=self.font_long_region, fill=(20, 20, 20))
-            d.text((855, 38), reg[2], font=self.font_long_region, fill=(20, 20, 20))
+            draw_char_exact(d, reg[0], 780, 38, self.font_reg_3)
+            draw_char_exact(d, reg[1], 845, 38, self.font_reg_3)
+            draw_char_exact(d, reg[2], 910, 38, self.font_reg_3)
+
+        # RUS text (No flag for 1B as per GOST)
+        d.text((835, 155), "RUS", font=self.font_rus_long, fill=(15, 15, 15))
 
         return im, full_str
 
@@ -194,29 +167,67 @@ class PlateRenderer:
             full_str = plate_num
             l1, d3, l2, reg = plate_num[0], plate_num[1:4], plate_num[4:6], plate_num[6:]
 
-        im = self.tpl_square_1a.copy()
+        w, h = 558, 331
+        color = (15, 15, 15)
+
+        # Base image
+        pil_im = Image.new("RGB", (w, h), (252, 252, 252))
+        d_temp = ImageDraw.Draw(pil_im)
+        d_temp.rounded_rectangle([7, 7, w - 8, h - 8], radius=22, outline=color, width=7)
+
+        # OpenCV overlay for antialiased region compartment curves
+        img = np.array(pil_im)
+        x_corner = 328
+        y_line = 166
+        R = 20
+        y_bot = h - 8
+
+        # 1. Top horizontal line of region box
+        cv2.line(img, (x_corner + R, y_line), (w - 11, y_line), color, 6, cv2.LINE_AA)
+        # 2. Rounded corner arc
+        cv2.ellipse(img, (x_corner + R, y_line + R), (R, R), 0, 180, 270, color, 6, cv2.LINE_AA)
+        # 3. Vertical line down
+        cv2.line(img, (x_corner, y_line + R), (x_corner, y_bot - 10), color, 6, cv2.LINE_AA)
+        # 4. Smooth fillet joining bottom border
+        fillet_pts = np.array([
+            [x_corner - 8, y_bot - 2],
+            [x_corner + 8, y_bot - 2],
+            [x_corner + 3, y_bot - 12],
+            [x_corner - 3, y_bot - 12]
+        ], dtype=np.int32)
+        cv2.fillPoly(img, [fillet_pts], color, cv2.LINE_AA)
+
+        im = Image.fromarray(img)
         d = ImageDraw.Draw(im)
 
         # TOP ROW: Letter 1 + 3 Digits
-        d.text((55, 52), l1, font=self.font_1a_top_letter, fill=(20, 20, 20))
+        draw_char_exact(d, l1, 99, 36, self.font_1a_letter)
+        draw_char_exact(d, d3[0], 232, 37, self.font_1a_digit)
+        draw_char_exact(d, d3[1], 312, 37, self.font_1a_digit)
+        draw_char_exact(d, d3[2], 392, 36, self.font_1a_digit)
 
-        d1a_start = 160
-        d1a_spacing = 90
-        for i, digit in enumerate(d3):
-            d.text((d1a_start + i * d1a_spacing, 42), digit, font=self.font_1a_top_digits, fill=(20, 20, 20))
+        # BOTTOM ROW: 2 Letters
+        draw_char_exact(d, l2[0], 84, 186, self.font_1a_letter)
+        draw_char_exact(d, l2[1], 182, 188, self.font_1a_letter)
 
-        # BOTTOM ROW: 2 Letters + Region
-        d.text((55, 195), l2[0], font=self.font_1a_bot_letters, fill=(20, 20, 20))
-        d.text((145, 195), l2[1], font=self.font_1a_bot_letters, fill=(20, 20, 20))
-
-        # Region
+        # Region Code (Inside compartment)
         if len(reg) == 2:
-            d.text((275, 185), reg[0], font=self.font_1a_region, fill=(20, 20, 20))
-            d.text((355, 185), reg[1], font=self.font_1a_region, fill=(20, 20, 20))
+            draw_char_exact(d, reg[0], 382, 180, self.font_1a_reg_2)
+            draw_char_exact(d, reg[1], 444, 180, self.font_1a_reg_2)
         else:
-            d.text((250, 185), reg[0], font=self.font_1a_region, fill=(20, 20, 20))
-            d.text((320, 185), reg[1], font=self.font_1a_region, fill=(20, 20, 20))
-            d.text((390, 185), reg[2], font=self.font_1a_region, fill=(20, 20, 20))
+            draw_char_exact(d, reg[0], 350, 182, self.font_1a_reg_3)
+            draw_char_exact(d, reg[1], 405, 182, self.font_1a_reg_3)
+            draw_char_exact(d, reg[2], 460, 182, self.font_1a_reg_3)
+
+        # RUS + Flag
+        fx, fy, fw, fh = 460, 277, 52, 25
+        sh = fh // 3
+        d.rectangle([fx, fy, fx + fw, fy + sh], fill=(255, 255, 255))
+        d.rectangle([fx, fy + sh, fx + fw, fy + 2 * sh], fill=(0, 57, 166))
+        d.rectangle([fx, fy + 2 * sh, fx + fw, fy + fh], fill=(213, 43, 30))
+        d.rectangle([fx, fy, fx + fw, fy + fh], outline=(15, 15, 15), width=1)
+
+        d.text((380, 274), "RUS", font=self.font_1a_rus, fill=(15, 15, 15))
 
         return im, full_str
 

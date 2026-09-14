@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Zero-Copy YOLO-Pose Dataset Preparation for Volga IT 2026.
-Reads dataset annotations, extracts 4 quad keypoints, creates train/val splits,
-and generates ultralytics YOLO-pose data.yaml without duplicating image files.
+Reads dataset annotations, prepares labels in dataset/labels/synthetic,
+creates stratified train/val splits, and generates ultralytics YOLO-pose data.yaml.
 """
 
 import argparse
@@ -22,13 +22,12 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
         sys.exit(1)
 
     pose_dir = os.path.join(dataset_dir, "yolo_pose")
-    pose_labels_dir = os.path.join(dataset_dir, "labels_pose")
+    pose_synth_labels_dir = os.path.join(dataset_dir, "labels", "synthetic")
     os.makedirs(pose_dir, exist_ok=True)
-    os.makedirs(pose_labels_dir, exist_ok=True)
+    os.makedirs(pose_synth_labels_dir, exist_ok=True)
 
     class_map = {"type1": 0, "type1a": 1, "type1b": 2, "other": 3}
 
-    # Group by class for stratified split
     samples_by_class: Dict[str, List[Dict]] = {k: [] for k in class_map.keys()}
 
     with open(meta_path, "r", encoding="utf-8") as f:
@@ -51,59 +50,54 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
     print(f"Train split:   {len(train_rows)}")
     print(f"Val split:     {len(val_rows)}")
 
-    # Process each sample to generate standard YOLO-pose label
+    # Process each sample to generate standard YOLO-pose label in labels/synthetic/
+    count = 0
     for row in train_rows + val_rows:
         img_rel = row["image"]
         base_name = os.path.splitext(os.path.basename(img_rel))[0]
         p_type = row["plate_type"]
         class_id = class_map[p_type]
 
-        # Read original label if exists, or compute from bbox & quad
         raw_label_path = os.path.join(dataset_dir, "labels", f"{base_name}.txt")
-        pose_label_path = os.path.join(pose_labels_dir, f"{base_name}.txt")
+        target_label_path = os.path.join(pose_synth_labels_dir, f"{base_name}.txt")
 
         if os.path.exists(raw_label_path):
             with open(raw_label_path, "r", encoding="utf-8") as rf:
                 line = rf.readline().strip()
                 tokens = line.split()
-                # Tokens: [class, xc, yc, w, h, x1, y1, x2, y2, x3, y3, x4, y4, plate_num]
                 if len(tokens) >= 13:
                     yolo_pose_str = " ".join(tokens[:13])
-                    with open(pose_label_path, "w", encoding="utf-8") as wf:
+                    with open(target_label_path, "w", encoding="utf-8") as wf:
                         wf.write(yolo_pose_str + "\n")
         else:
-            # Generate from meta.csv bbox and quad
+            # Generate from meta.csv
             bbox = [int(v) for v in row["bbox"].split(",")]
             quad = [int(v) for v in row["quad"].split(",")]
-            img_full = os.path.join(dataset_dir, img_rel)
-            if os.path.exists(img_full):
-                import cv2
-                img = cv2.imread(img_full)
-                if img is not None:
-                    h, w = img.shape[:2]
-                    bx, by, bw, bh = bbox
-                    xc = (bx + bw / 2.0) / w
-                    yc = (by + bh / 2.0) / h
-                    nw = bw / w
-                    nh = bh / h
-                    norm_quad = []
-                    for i in range(4):
-                        norm_quad.extend([quad[i * 2] / w, quad[i * 2 + 1] / h])
-                    q_str = " ".join(f"{v:.6f}" for v in norm_quad)
-                    with open(pose_label_path, "w", encoding="utf-8") as wf:
-                        wf.write(f"{class_id} {xc:.6f} {yc:.6f} {nw:.6f} {nh:.6f} {q_str}\n")
+            w, h = 1280, 720  # Standard scene resolution
+            bx, by, bw, bh = bbox
+            xc = (bx + bw / 2.0) / w
+            yc = (by + bh / 2.0) / h
+            nw = bw / w
+            nh = bh / h
+            norm_quad = []
+            for i in range(4):
+                norm_quad.extend([quad[i * 2] / w, quad[i * 2 + 1] / h])
+            q_str = " ".join(f"{v:.6f}" for v in norm_quad)
+            with open(target_label_path, "w", encoding="utf-8") as wf:
+                wf.write(f"{class_id} {xc:.6f} {yc:.6f} {nw:.6f} {nh:.6f} {q_str}\n")
+        count += 1
 
-    # Write train.txt and val.txt with absolute or relative paths
+    # Write train.txt and val.txt with forward-slashed absolute paths
     train_txt_path = os.path.join(pose_dir, "train.txt")
     val_txt_path = os.path.join(pose_dir, "val.txt")
 
     with open(train_txt_path, "w", encoding="utf-8") as tf:
         for r in train_rows:
-            tf.write(os.path.abspath(os.path.join(dataset_dir, r["image"])) + "\n")
+            tf.write(os.path.abspath(os.path.join(dataset_dir, r["image"])).replace("\\", "/") + "\n")
 
     with open(val_txt_path, "w", encoding="utf-8") as vf:
         for r in val_rows:
-            vf.write(os.path.abspath(os.path.join(dataset_dir, r["image"])) + "\n")
+            vf.write(os.path.abspath(os.path.join(dataset_dir, r["image"])).replace("\\", "/") + "\n")
 
     # Generate data.yaml
     data_yaml_path = os.path.join(pose_dir, "data.yaml")
@@ -123,9 +117,8 @@ names:
     with open(data_yaml_path, "w", encoding="utf-8") as yf:
         yf.write(yaml_content)
 
-    print(f"\n[SUCCESS] YOLO-Pose dataset manifest created!")
+    print(f"\n[SUCCESS] Prepared {count} YOLO-pose labels in: {pose_synth_labels_dir}")
     print(f"Manifest: {data_yaml_path}")
-    print(f"Labels:   {pose_labels_dir}")
     print(f"Train:    {train_txt_path}")
     print(f"Val:      {val_txt_path}")
 
