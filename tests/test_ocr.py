@@ -86,6 +86,23 @@ class TestPlateOCR(unittest.TestCase):
         repaired3 = self.decoder.apply_gost_heuristics(raw3)
         self.assertEqual(repaired3, "A123BC87")
 
+    def test_gost_heuristics_type1b_bus(self):
+        # Classic 7-char Russian bus plate: LL DDD DD
+        # Bolt artifact 'H' at end of 7-char plate should be truncated
+        raw = "BX18750H"
+        repaired = self.decoder.apply_gost_heuristics(raw, plate_type="type1b")
+        self.assertEqual(repaired, "BX18750")
+
+        # Digit confusion in pos 0 should become letter
+        raw2 = "0X18750"
+        repaired2 = self.decoder.apply_gost_heuristics(raw2, plate_type="type1b")
+        self.assertEqual(repaired2, "OX18750")
+
+        # Letter confusion in region should become digit
+        raw3 = "AH8897B"
+        repaired3 = self.decoder.apply_gost_heuristics(raw3, plate_type="type1b")
+        self.assertEqual(repaired3, "AH88978")
+
     def test_preprocess_tensor_shape(self):
         ocr = PlateOCR()
         dummy_crop = np.zeros((36, 160, 3), dtype=np.uint8)

@@ -216,40 +216,63 @@ class CTCDecoder:
         chars = list(plate)
         norm_type = plate_type.lower().strip()
 
-        # Check if type1b is in classic bus format (LL DDD DD / LL DDD DDD):
-        # In classic bus, chars[4] and chars[5] must be digits (e.g. AH88977)
-        c4_digit = len(chars) > 5 and (chars[4].isdigit() or chars[4] in LETTER_TO_DIGIT)
-        c5_digit = len(chars) > 5 and (chars[5].isdigit() or chars[5] in LETTER_TO_DIGIT)
-        if norm_type == "type1b" and len(chars) in (7, 8) and c4_digit and c5_digit:
-            # Classic Bus format: LL DDD DD (7 chars) or LL DDD DDD (8 chars)
-            for pos in (0, 1):
-                c = chars[pos]
-                if c in DIGIT_TO_LETTER:
-                    chars[pos] = DIGIT_TO_LETTER[c]
+        # Check if plate is in classic Russian bus format (Type 1B: LL DDD DD):
+        # In classic bus format, the first TWO characters are letters (e.g. AH88977, BX18750, OX18750)
+        # whereas in unified format (Type 1, Type 1A, and synth Type 1B) the second character is a digit (e.g. X071EM196).
+        c0_letter = len(chars) > 0 and ((chars[0] in LETTERS) or (chars[0] in DIGIT_TO_LETTER))
+        c1_letter = len(chars) > 1 and (chars[1] in LETTERS)
+        is_classic_bus = (
+            norm_type == "type1b"
+            and len(chars) >= 7
+            and c0_letter
+            and c1_letter
+        )
 
-            digit_positions = [2, 3, 4] + list(range(5, len(chars)))
-            for pos in digit_positions:
-                c = chars[pos]
-                if c in LETTER_TO_DIGIT:
-                    chars[pos] = LETTER_TO_DIGIT[c]
+        if is_classic_bus:
+            # Classic Russian bus plates under GOST R 50577-2018:
+            # Strictly 2 letters + 3 digits + 2-digit region = 7 characters (e.g., AH 889 77, BX 187 50).
+            # If 8 characters are predicted, the 8th character is invariably an artifact
+            # (black mounting bolt, border line, or 'RUS' lettering on the right edge).
+            if len(chars) >= 8:
+                chars = chars[:7]
 
-            return "".join(chars)
+            if len(chars) == 7:
+                # Enforce Pos 0, 1 as letters
+                for pos in (0, 1):
+                    c = chars[pos]
+                    if c in DIGIT_TO_LETTER:
+                        chars[pos] = DIGIT_TO_LETTER[c]
+
+                # Enforce Pos 2..6 as digits
+                for pos in range(2, 7):
+                    c = chars[pos]
+                    if c in LETTER_TO_DIGIT:
+                        chars[pos] = LETTER_TO_DIGIT[c]
+
+                return "".join(chars)
 
         # Standard Unified GOST / Competition format (Type 1, Type 1A, and Competition Type 1B):
-        # Format: L DDD LL RR (8 or 9 chars)
+        # Format: L DDD LL RR (8 chars) or L DDD LL RRR (9 chars)
         if len(chars) in (8, 9):
+            # Check for trailing bolt/noise on 8-char plates that became 9
+            if len(chars) == 9 and chars[8] in LETTERS and chars[8] not in LETTER_TO_DIGIT:
+                # 9th char is an unexpected letter on digit position -> trailing artifact
+                chars = chars[:8]
+
             # Expected Letter positions: 0, 4, 5
             for pos in (0, 4, 5):
-                c = chars[pos]
-                if c in DIGIT_TO_LETTER:
-                    chars[pos] = DIGIT_TO_LETTER[c]
+                if pos < len(chars):
+                    c = chars[pos]
+                    if c in DIGIT_TO_LETTER:
+                        chars[pos] = DIGIT_TO_LETTER[c]
 
             # Expected Digit positions: 1, 2, 3, and 6..end
             digit_positions = [1, 2, 3] + list(range(6, len(chars)))
             for pos in digit_positions:
-                c = chars[pos]
-                if c in LETTER_TO_DIGIT:
-                    chars[pos] = LETTER_TO_DIGIT[c]
+                if pos < len(chars):
+                    c = chars[pos]
+                    if c in LETTER_TO_DIGIT:
+                        chars[pos] = LETTER_TO_DIGIT[c]
 
             return "".join(chars)
 

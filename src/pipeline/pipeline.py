@@ -380,7 +380,15 @@ class OmniPlatePipeline:
             return detection
 
         try:
-            if plate_type == "type1a":
+            bx, by, bw, bh = detection.bbox
+            ar = bw / float(bh) if bh > 0 else 1.0
+
+            # Guard: Physical Type 1A is a 2-line square plate (aspect ratio ~1.706).
+            # In perspective perspective angles, AR decreases. If AR > 2.20, it is physically
+            # an elongated single-line plate (Type 1), so we must NOT split it horizontally.
+            is_square_1a = (plate_type == "type1a") and (ar <= 2.20)
+
+            if is_square_1a:
                 # Type 1A Two-Line Square Plate
                 rectified = self.rectifier.rectify(
                     image,
@@ -403,15 +411,16 @@ class OmniPlatePipeline:
                 detection.ocr_confidence = round(conf_stitched, 4)
 
             else:
-                # Type 1 and Type 1B Single-Line Plates
+                # Type 1 and Type 1B Single-Line Plates (or single-line fallback if misclassified as 1a)
+                actual_type = "type1" if plate_type == "type1a" else plate_type
                 rectified = self.rectifier.rectify(
                     image,
                     detection.quad,
-                    plate_type=plate_type,
+                    plate_type=actual_type,
                 )
                 detection.rectified_crop = rectified
 
-                text, ocr_conf = self.ocr.predict_single(rectified, plate_type=plate_type)
+                text, ocr_conf = self.ocr.predict_single(rectified, plate_type=actual_type)
                 detection.text = text
                 detection.ocr_confidence = ocr_conf
 
@@ -493,21 +502,26 @@ class OmniPlatePipeline:
             # Time rectification
             _sync()
             t_r0 = time.perf_counter()
-            if det.plate_type == "type1a":
+            bx, by, bw, bh = det.bbox
+            ar = bw / float(bh) if bh > 0 else 1.0
+            is_square_1a = (det.plate_type == "type1a") and (ar <= 2.20)
+
+            if is_square_1a:
                 rectified = self.rectifier.rectify(img_bgr, det.quad, plate_type="type1a")
                 top_line, bottom_line = self.rectifier.split_type1a(rectified)
                 crop_for_ocr = self.rectifier.stitch_type1a_horizontal(
                     top_line, bottom_line, target_size=(160, 36)
                 )
             else:
-                crop_for_ocr = self.rectifier.rectify(img_bgr, det.quad, plate_type=det.plate_type)
+                actual_type = "type1" if det.plate_type == "type1a" else det.plate_type
+                crop_for_ocr = self.rectifier.rectify(img_bgr, det.quad, plate_type=actual_type)
             _sync()
             rect_ms += (time.perf_counter() - t_r0) * 1000.0
 
             # Time OCR
             _sync()
             t_o0 = time.perf_counter()
-            text, ocr_conf = self.ocr.predict_single(crop_for_ocr)
+            text, ocr_conf = self.ocr.predict_single(crop_for_ocr, plate_type=det.plate_type)
             _sync()
             ocr_ms += (time.perf_counter() - t_o0) * 1000.0
 
