@@ -110,7 +110,9 @@ def main():
     parser.add_argument("--output_dir", type=str, default="test_output", help="Directory to save visual results")
     parser.add_argument("--device", type=str, default="cuda", help="Inference device: 'cuda' or 'cpu'")
     parser.add_argument("--conf", type=float, default=0.25, help="Detector confidence threshold (default: 0.25)")
-    parser.add_argument("--limit", type=int, default=12, help="Max sample images to evaluate")
+    parser.add_argument("--source", type=str, default="balanced", choices=["balanced", "real", "synth"], help="Sample source: 'balanced', 'real', or 'synth'")
+    parser.add_argument("--pattern", type=str, default=None, help="Optional filename pattern filter (e.g. 'type1b', 'type1a', '0096')")
+    parser.add_argument("--limit", type=int, default=25, help="Max sample images to evaluate")
     args = parser.parse_args()
 
     print("=" * 75)
@@ -131,12 +133,28 @@ def main():
     print("[*] Warming up pipeline...")
     pipeline.warmup(iterations=2)
 
-    # Collect Balanced Test Images
+    # Collect Test Images
     test_files: List[Path] = []
     meta_lookup = load_meta_lookup()
 
     if args.image:
         test_files.append(Path(args.image))
+    elif args.source == "real":
+        real_dir = PROJECT_ROOT / "dataset" / "images" / "real"
+        if real_dir.exists():
+            if args.pattern:
+                test_files = sorted(list(real_dir.glob(f"*{args.pattern}*.jpg")))
+            else:
+                # Balanced real: mix of 1A, 1B, and other
+                f_1a = sorted(list(real_dir.glob("real_type1a_*.jpg")))
+                f_1b = sorted(list(real_dir.glob("real_type1b_*.jpg")))
+                f_oth = sorted(list(real_dir.glob("real_other_*.jpg")))
+                c_each = max(1, args.limit // 3)
+                test_files = f_1a[:c_each] + f_1b[:c_each] + f_oth[:c_each]
+    elif args.source == "synth":
+        synth_dir = PROJECT_ROOT / "dataset" / "images" / "synthetic"
+        if synth_dir.exists():
+            test_files = sorted(list(synth_dir.glob("synth_*.jpg")))
     else:
         synth_dir = PROJECT_ROOT / "dataset" / "images" / "synthetic"
         real_dir = PROJECT_ROOT / "dataset" / "images" / "real"
@@ -156,9 +174,9 @@ def main():
         # 2. Real samples (Type 1A, Type 1B, Other)
         if real_dir.exists():
             for pattern, max_c in [
-                ("real_type1a_*.jpg", 2),
-                ("real_type1b_*.jpg", 2),
-                ("real_other_*.jpg", 1),
+                ("real_type1a_*.jpg", 4),
+                ("real_type1b_*.jpg", 6),
+                ("real_other_*.jpg", 2),
             ]:
                 matches = list(real_dir.glob(pattern))
                 if matches:
