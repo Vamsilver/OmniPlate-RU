@@ -266,20 +266,26 @@ class PlateOCR:
             self.load(model_path)
 
     def load(self, model_path: str) -> None:
-        if model_path.endswith(".onnx") or self.use_onnx:
-            import onnxruntime as ort
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in self.device else ["CPUExecutionProvider"]
-            self.session = ort.InferenceSession(model_path, providers=providers)
-            self.use_onnx = True
-        else:
-            if torch is None:
-                raise ImportError("PyTorch is required to load .pt checkpoint.")
-            self.model = LPRNet(num_classes=NUM_CLASSES)
-            ckpt = torch.load(model_path, map_location=self.device)
-            state_dict = ckpt.get("state_dict", ckpt)
-            self.model.load_state_dict(state_dict)
-            self.model.to(self.device)
-            self.model.eval()
+        try:
+            if model_path.endswith(".onnx") or self.use_onnx:
+                import onnxruntime as ort
+                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in self.device else ["CPUExecutionProvider"]
+                self.session = ort.InferenceSession(model_path, providers=providers)
+                self.use_onnx = True
+            else:
+                if torch is None:
+                    raise ImportError("PyTorch is required to load .pt checkpoint.")
+                self.model = LPRNet(num_classes=NUM_CLASSES)
+                ckpt = torch.load(model_path, map_location=self.device)
+                state_dict = ckpt.get("state_dict", ckpt)
+                self.model.load_state_dict(state_dict)
+                self.model.to(self.device)
+                self.model.eval()
+        except ImportError as e:
+            print(f"[!] Warning: Failed to import inference engine for {model_path}: {e}")
+            self.session = None
+            self.model = None
+
 
     def preprocess(self, crop_bgr: np.ndarray) -> np.ndarray:
         """
