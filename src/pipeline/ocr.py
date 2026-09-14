@@ -227,8 +227,6 @@ class CTCDecoder:
                 c = chars[pos]
                 if c in DIGIT_TO_LETTER:
                     chars[pos] = DIGIT_TO_LETTER[c]
-                elif c not in LETTERS and c != WILDCARD:
-                    chars[pos] = WILDCARD
 
             # Expected Digit positions: 2, 3, 4, and 5..end
             digit_positions = [2, 3, 4] + list(range(5, len(chars)))
@@ -236,8 +234,6 @@ class CTCDecoder:
                 c = chars[pos]
                 if c in LETTER_TO_DIGIT:
                     chars[pos] = LETTER_TO_DIGIT[c]
-                elif c not in DIGITS and c != WILDCARD:
-                    chars[pos] = WILDCARD
 
             return "".join(chars)
 
@@ -250,8 +246,6 @@ class CTCDecoder:
             c = chars[pos]
             if c in DIGIT_TO_LETTER:
                 chars[pos] = DIGIT_TO_LETTER[c]
-            elif c not in LETTERS and c != WILDCARD:
-                chars[pos] = WILDCARD
 
         # Expected Digit positions: 1, 2, 3, and 6..end
         digit_positions = [1, 2, 3] + list(range(6, len(plate)))
@@ -259,19 +253,8 @@ class CTCDecoder:
             c = chars[pos]
             if c in LETTER_TO_DIGIT:
                 chars[pos] = LETTER_TO_DIGIT[c]
-            elif c not in DIGITS and c != WILDCARD:
-                chars[pos] = WILDCARD
 
-        repaired = "".join(chars)
-
-        # Verify 3-digit region prefix
-        if len(repaired) == 9 and repaired[6] not in VALID_3DIGIT_STARTS:
-            if repaired[6] != WILDCARD:
-                chars = list(repaired)
-                chars[6] = WILDCARD
-                repaired = "".join(chars)
-
-        return repaired
+        return "".join(chars)
 
 
 

@@ -83,18 +83,39 @@ def draw_detection(
     return vis
 
 
+def load_meta_lookup() -> dict:
+    """Loads image relative path -> {plate_num, plate_type} from meta.csv."""
+    lookup = {}
+    meta_file = PROJECT_ROOT / "dataset" / "meta.csv"
+    if not meta_file.exists():
+        return lookup
+    try:
+        import csv
+        with open(meta_file, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f, delimiter=";")
+            header = next(reader, None)
+            for row in reader:
+                if len(row) >= 3:
+                    img_rel, plate_num, p_type = row[0].replace("\\", "/"), row[1], row[2]
+                    base = Path(img_rel).name
+                    lookup[base] = {"plate_num": plate_num, "plate_type": p_type}
+    except Exception:
+        pass
+    return lookup
+
+
 def main():
     parser = argparse.ArgumentParser(description="OmniPlate Visual Smoke Tester")
     parser.add_argument("--image", type=str, default=None, help="Path to single test image")
     parser.add_argument("--output_dir", type=str, default="test_output", help="Directory to save visual results")
     parser.add_argument("--device", type=str, default="cuda", help="Inference device: 'cuda' or 'cpu'")
-    parser.add_argument("--conf", type=float, default=0.45, help="Detector confidence threshold (default: 0.45)")
-    parser.add_argument("--limit", type=int, default=10, help="Max sample images to evaluate")
+    parser.add_argument("--conf", type=float, default=0.25, help="Detector confidence threshold (default: 0.25)")
+    parser.add_argument("--limit", type=int, default=12, help="Max sample images to evaluate")
     args = parser.parse_args()
 
-    print("=" * 65)
+    print("=" * 75)
     print("  Volga IT 2026 - OmniPlate End-to-End Visual Verification")
-    print("=" * 65)
+    print("=" * 75)
 
     out_dir = PROJECT_ROOT / args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -110,36 +131,48 @@ def main():
     print("[*] Warming up pipeline...")
     pipeline.warmup(iterations=2)
 
-    # Collect Test Images
+    # Collect Balanced Test Images
     test_files: List[Path] = []
+    meta_lookup = load_meta_lookup()
+
     if args.image:
         test_files.append(Path(args.image))
     else:
-        # Pick representative samples from each class
-        real_dir = PROJECT_ROOT / "dataset" / "images" / "real"
         synth_dir = PROJECT_ROOT / "dataset" / "images" / "synthetic"
+        real_dir = PROJECT_ROOT / "dataset" / "images" / "real"
 
+        # 1. Synthetic samples (Type 1, Type 1A, Type 1B)
+        if synth_dir.exists():
+            for p_type, max_c in [("type1", 2), ("type1a", 2), ("type1b", 2)]:
+                found = 0
+                for f in synth_dir.glob("synth_*.jpg"):
+                    info = meta_lookup.get(f.name, {})
+                    if info.get("plate_type") == p_type:
+                        test_files.append(f)
+                        found += 1
+                        if found >= max_c:
+                            break
+
+        # 2. Real samples (Type 1A, Type 1B, Other)
         if real_dir.exists():
-            # Try to grab 1a, 1b, other
-            for pattern in ["real_type1a_*.jpg", "real_type1b_*.jpg", "real_other_*.jpg"]:
+            for pattern, max_c in [
+                ("real_type1a_*.jpg", 2),
+                ("real_type1b_*.jpg", 2),
+                ("real_other_*.jpg", 1),
+            ]:
                 matches = list(real_dir.glob(pattern))
                 if matches:
-                    test_files.extend(matches[:2])
-
-        if synth_dir.exists():
-            synth_matches = list(synth_dir.glob("synth_*.jpg"))
-            if synth_matches:
-                test_files.extend(synth_matches[:2])
+                    test_files.extend(matches[:max_c])
 
     test_files = test_files[:args.limit]
     if not test_files:
         print("[-] No test images found.")
         sys.exit(1)
 
-    print(f"\n[*] Evaluating {len(test_files)} sample images...")
-    print("-" * 75)
-    print(f"{'Image File':<25} | {'Type':<8} | {'Plate Text':<12} | {'Conf':<6} | {'Time (ms)':<9}")
-    print("-" * 75)
+    print(f"\n[*] Evaluating {len(test_files)} balanced sample images (conf={args.conf})...")
+    print("-" * 90)
+    print(f"{'Image File':<24} | {'Type':<8} | {'Pred Text':<12} | {'GT Text':<12} | {'Match':<7} | {'Time (ms)':<9}")
+    print("-" * 90)
 
     for img_path in test_files:
         if not img_path.exists():
@@ -154,19 +187,28 @@ def main():
         dur_ms = (time.perf_counter() - t0) * 1000.0
 
         vis_img = raw_img.copy()
+        gt_info = meta_lookup.get(img_path.name, {})
+        gt_text = gt_info.get("plate_num", "-")
+        gt_type = gt_info.get("plate_type", "-")
 
         if not detections:
-            print(f"{img_path.name:<25} | {'None':<8} | {'(no plate)':<12} | {'-':<6} | {dur_ms:<9.2f}")
+            match_status = "PASS (neg)" if gt_type == "other" or gt_text == "-" else "MISS"
+            print(f"{img_path.name:<24} | {gt_type:<8} | {'(no plate)':<12} | {gt_text:<12} | {match_status:<7} | {dur_ms:<9.2f}")
         else:
             for det in detections:
-                print(f"{img_path.name:<25} | {det.plate_type:<8} | {det.text or '(empty)':<12} | {det.confidence:<6.2f} | {dur_ms:<9.2f}")
+                pred_clean = (det.text or "").strip()
+                gt_clean = gt_text.strip()
+                is_match = "EXACT" if (pred_clean and pred_clean == gt_clean) else ("CLOSE" if (pred_clean and gt_clean and sum(c1 == c2 for c1, c2 in zip(pred_clean, gt_clean)) >= len(gt_clean) - 1) else "DIFF")
+                if gt_type == "other":
+                    is_match = "N/A"
+                print(f"{img_path.name:<24} | {det.plate_type:<8} | {pred_clean or '(empty)':<12} | {gt_text:<12} | {is_match:<7} | {dur_ms:<9.2f}")
                 vis_img = draw_detection(vis_img, det, timing_ms=dur_ms)
 
         # Save annotated image
         save_path = out_dir / f"vis_{img_path.name}"
         cv2.imwrite(str(save_path), vis_img)
 
-    print("-" * 75)
+    print("-" * 90)
     print(f"\n[SUCCESS] Visualized images saved to: {out_dir}")
 
 

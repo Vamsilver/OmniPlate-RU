@@ -166,15 +166,15 @@ class PlateCropDataset(Dataset):
         target = torch.tensor([CHAR2IDX[c] for c in plate_str], dtype=torch.long)
         target_len = len(plate_str)
 
-        return tensor, target, target_len, plate_str
+        return tensor, target, target_len, plate_str, item["plate_type"]
 
 
 def collate_fn(batch):
-    tensors, targets, target_lens, plate_nums = zip(*batch)
+    tensors, targets, target_lens, plate_nums, plate_types = zip(*batch)
     batch_tensors = torch.stack(tensors, dim=0)
     flat_targets = torch.cat(targets, dim=0)
     batch_target_lens = torch.tensor(target_lens, dtype=torch.long)
-    return batch_tensors, flat_targets, batch_target_lens, plate_nums
+    return batch_tensors, flat_targets, batch_target_lens, plate_nums, plate_types
 
 
 def train_ocr(args):
@@ -208,10 +208,26 @@ def train_ocr(args):
         collate_fn=collate_fn,
     )
 
+    # Deterministic seeding for reproducible convergence
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(42)
+
     model = LPRNet(num_classes=NUM_CLASSES, dropout_rate=0.2).to(device)
     ctc_loss = nn.CTCLoss(blank=BLANK_IDX, zero_infinity=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+    total_steps = args.epochs * len(train_loader)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=args.lr,
+        total_steps=total_steps,
+        pct_start=0.25,
+        anneal_strategy="cos",
+        div_factor=10.0,
+        final_div_factor=1000.0,
+    )
 
     os.makedirs(args.output_dir, exist_ok=True)
     best_acc = 0.0
@@ -222,7 +238,7 @@ def train_ocr(args):
         total_loss = 0.0
         start_t = time.time()
 
-        for batch_idx, (tensors, flat_targets, target_lens, _) in enumerate(train_loader):
+        for batch_idx, (tensors, flat_targets, target_lens, _, _) in enumerate(train_loader):
             tensors = tensors.to(device)
             flat_targets = flat_targets.to(device)
 
@@ -236,10 +252,10 @@ def train_ocr(args):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
+            scheduler.step()
 
             total_loss += loss.item()
 
-        scheduler.step()
         train_loss = total_loss / max(1, len(train_loader))
 
         # Validation
@@ -248,24 +264,31 @@ def train_ocr(args):
         val_total = 0
         val_char_correct = 0
         val_char_total = 0
+        by_type_correct = {"type1": 0, "type1a": 0, "type1b": 0}
+        by_type_total = {"type1": 0, "type1a": 0, "type1b": 0}
 
         sample_preds = []
         with torch.no_grad():
-            for tensors, _, _, ground_truths in val_loader:
+            for tensors, _, _, ground_truths, plate_types in val_loader:
                 tensors = tensors.to(device)
                 logits = model(tensors)  # (B, T=40, num_classes)
                 preds = logits.argmax(dim=-1).cpu().numpy()
 
                 for i, gt in enumerate(ground_truths):
+                    pt = plate_types[i]
                     pred_str = CTCDecoder.decode_greedy(preds[i], blank_idx=BLANK_IDX)
-                    pred_str = CTCDecoder.apply_gost_heuristics(pred_str)
+                    pred_str = CTCDecoder.apply_gost_heuristics(pred_str, plate_type=pt)
 
                     if len(sample_preds) < 2 and (epoch % 5 == 0 or epoch == args.epochs):
                         sample_preds.append((pred_str, gt))
 
                     if pred_str == gt:
                         val_correct += 1
+                        if pt in by_type_correct:
+                            by_type_correct[pt] += 1
                     val_total += 1
+                    if pt in by_type_total:
+                        by_type_total[pt] += 1
 
                     min_len = min(len(pred_str), len(gt))
                     val_char_correct += sum(1 for c1, c2 in zip(pred_str[:min_len], gt[:min_len]) if c1 == c2)
@@ -273,13 +296,16 @@ def train_ocr(args):
 
         seq_acc = (val_correct / max(1, val_total)) * 100.0
         char_acc = (val_char_correct / max(1, val_char_total)) * 100.0
+        acc_t1 = (by_type_correct["type1"] / max(1, by_type_total["type1"])) * 100.0
+        acc_1a = (by_type_correct["type1a"] / max(1, by_type_total["type1a"])) * 100.0
+        acc_1b = (by_type_correct["type1b"] / max(1, by_type_total["type1b"])) * 100.0
         elapsed = time.time() - start_t
 
         print(
             f"Epoch [{epoch:02d}/{args.epochs:02d}] "
             f"Loss: {train_loss:.4f} | "
-            f"Val Seq Acc: {seq_acc:.2f}% | "
-            f"Char Acc: {char_acc:.2f}% | "
+            f"Val: {seq_acc:.1f}% (T1:{acc_t1:.0f}% 1A:{acc_1a:.0f}% 1B:{acc_1b:.0f}%) | "
+            f"Char: {char_acc:.1f}% | "
             f"Time: {elapsed:.1f}s"
         )
         if sample_preds:

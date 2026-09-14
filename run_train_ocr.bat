@@ -9,9 +9,9 @@ echo ========================================================
 
 echo.
 echo ========================================================
-echo Starting High-Speed LPRNet OCR Training (RTX 5080)
+echo Starting High-Precision OneCycle LPRNet Training (RTX 5080)
 echo ========================================================
-.venv\Scripts\python.exe -u scripts\train_ocr.py --epochs 70 --batch_size 64 --workers 0 2>&1 | powershell -command "$input | Tee-Object -FilePath train_ocr.log"
+.venv\Scripts\python.exe -u scripts\train_ocr.py --epochs 90 --batch_size 64 --workers 0 2>&1 | powershell -command "$input | Tee-Object -FilePath train_ocr.log"
 
 echo.
 echo ========================================================

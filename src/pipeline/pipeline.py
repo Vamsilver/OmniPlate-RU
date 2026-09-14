@@ -127,10 +127,10 @@ class OmniPlatePipeline:
         """
         bx, by, bw, bh = bbox
 
-        # 1. Extreme size rejection (plate cannot be smaller than 25x12 or larger than 35% of frame)
-        if bw < 25 or bh < 12:
+        # 1. Extreme size rejection (plate cannot be smaller than 20x10 or larger than 85% width / 70% height)
+        if bw < 20 or bh < 10:
             return False
-        if bw > img_w * 0.35 or bh > img_h * 0.25:
+        if bw > img_w * 0.85 or bh > img_h * 0.70:
             return False
 
         # 2. Border edge rejection: highway guardrails / road cuts right at frame top edge
@@ -393,29 +393,15 @@ class OmniPlatePipeline:
                 # Split top and bottom lines
                 top_line, bottom_line = self.rectifier.split_type1a(rectified)
 
-                # Approach A: Stitched horizontal strip (canonical format)
+                # Canonical Stitched horizontal strip (format LPRNet was trained on)
                 stitched = self.rectifier.stitch_type1a_horizontal(
                     top_line,
                     bottom_line,
                     target_size=(160, 36),
                 )
                 text_stitched, conf_stitched = self.ocr.predict_single(stitched, plate_type="type1a")
-
-                # Approach B: Line-by-line independent recognition
-                top_crop = cv2.resize(top_line, (160, 36), interpolation=cv2.INTER_LINEAR)
-                bot_crop = cv2.resize(bottom_line, (160, 36), interpolation=cv2.INTER_LINEAR)
-                t_top, c_top = self.ocr.predict_single(top_crop, plate_type="raw")
-                t_bot, c_bot = self.ocr.predict_single(bot_crop, plate_type="raw")
-                text_lines = self.ocr.decoder.apply_gost_heuristics((t_top + t_bot).strip(), plate_type="type1a")
-                conf_lines = (c_top + c_bot) / 2.0
-
-                # Select best candidate by confidence and validity
-                if len(text_lines) in (8, 9) and conf_lines >= conf_stitched:
-                    detection.text = text_lines
-                    detection.ocr_confidence = round(conf_lines, 4)
-                else:
-                    detection.text = text_stitched
-                    detection.ocr_confidence = round(conf_stitched, 4)
+                detection.text = text_stitched
+                detection.ocr_confidence = round(conf_stitched, 4)
 
             else:
                 # Type 1 and Type 1B Single-Line Plates
