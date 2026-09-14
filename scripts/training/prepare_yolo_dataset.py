@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Zero-Copy YOLO-Pose Dataset Preparation for Volga IT 2026.
 Reads dataset annotations, prepares labels in dataset/labels/synthetic,
@@ -34,8 +34,14 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
         reader = csv.DictReader(f, delimiter=";")
         for row in reader:
             p_type = row.get("plate_type")
-            if p_type in samples_by_class:
+            is_syn = row.get("is_synthetic", "0")
+            # Strict synthetic-first strategy: train YOLO strictly on verified synthetic plates
+            # + negative background samples to suppress false positives on background objects
+            if is_syn == "1" and p_type in ("type1", "type1a", "type1b"):
                 samples_by_class[p_type].append(row)
+            elif p_type == "other":
+                # Include negative background samples
+                samples_by_class["other"].append(row)
 
     train_rows = []
     val_rows = []
@@ -50,17 +56,27 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
     print(f"Train split:   {len(train_rows)}")
     print(f"Val split:     {len(val_rows)}")
 
-    # Process each sample to generate standard YOLO-pose label in labels/synthetic/
+    # Process each sample to generate standard YOLO-pose labels
     count = 0
     for row in train_rows + val_rows:
         img_rel = row["image"]
         base_name = os.path.splitext(os.path.basename(img_rel))[0]
         p_type = row["plate_type"]
-        class_id = class_map[p_type]
+
+        # Ensure label directory corresponds to image subdirectory (labels/synthetic or labels/real)
+        subdir = os.path.dirname(img_rel).replace("images", "labels")
+        target_dir = os.path.join(dataset_dir, subdir)
+        os.makedirs(target_dir, exist_ok=True)
+        target_label_path = os.path.join(target_dir, f"{base_name}.txt")
+
+        if p_type == "other":
+            # Negative background sample (no plate) -> empty file teaches YOLO zero false positives
+            with open(target_label_path, "w", encoding="utf-8") as wf:
+                pass
+            count += 1
+            continue
 
         raw_label_path = os.path.join(dataset_dir, "labels", f"{base_name}.txt")
-        target_label_path = os.path.join(pose_synth_labels_dir, f"{base_name}.txt")
-
         if os.path.exists(raw_label_path):
             with open(raw_label_path, "r", encoding="utf-8") as rf:
                 line = rf.readline().strip()
@@ -69,23 +85,7 @@ def prepare_yolo_pose(dataset_dir: str, val_ratio: float = 0.2, seed: int = 42):
                     yolo_pose_str = " ".join(tokens[:13])
                     with open(target_label_path, "w", encoding="utf-8") as wf:
                         wf.write(yolo_pose_str + "\n")
-        else:
-            # Generate from meta.csv
-            bbox = [int(v) for v in row["bbox"].split(",")]
-            quad = [int(v) for v in row["quad"].split(",")]
-            w, h = 1280, 720  # Standard scene resolution
-            bx, by, bw, bh = bbox
-            xc = (bx + bw / 2.0) / w
-            yc = (by + bh / 2.0) / h
-            nw = bw / w
-            nh = bh / h
-            norm_quad = []
-            for i in range(4):
-                norm_quad.extend([quad[i * 2] / w, quad[i * 2 + 1] / h])
-            q_str = " ".join(f"{v:.6f}" for v in norm_quad)
-            with open(target_label_path, "w", encoding="utf-8") as wf:
-                wf.write(f"{class_id} {xc:.6f} {yc:.6f} {nw:.6f} {nh:.6f} {q_str}\n")
-        count += 1
+            count += 1
 
     # Write train.txt and val.txt with forward-slashed absolute paths
     train_txt_path = os.path.join(pose_dir, "train.txt")
