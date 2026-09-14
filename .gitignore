@@ -76,6 +76,10 @@ dataset/audit_results.csv
 *.bak*
 preview_*.png
 real_*.jpg
+*.cache
+test_output/
+dataset/labels/real.cache
+dataset/labels/real/
 .jobs/
 
 

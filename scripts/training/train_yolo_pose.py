@@ -74,10 +74,15 @@ def main():
     total_time = time.time() - start_time
     print(f"\n[+] Training completed in {total_time:.1f}s ({total_time / 60.0:.2f} min)!")
 
-    best_pt = os.path.join("models", "yolo_pose_run", "weights", "best.pt")
+    candidate_paths = [
+        getattr(results, "save_dir", "") and os.path.join(str(results.save_dir), "weights", "best.pt"),
+        os.path.join("runs", "pose", "models", "yolo_pose_run", "weights", "best.pt"),
+        os.path.join("models", "yolo_pose_run", "weights", "best.pt"),
+    ]
+    best_pt = next((p for p in candidate_paths if p and os.path.exists(p)), None)
     target_pt = os.path.join("models", "detector_yolo_pose_best.pt")
 
-    if os.path.exists(best_pt):
+    if best_pt and os.path.exists(best_pt):
         os.makedirs("models", exist_ok=True)
         shutil.copy(best_pt, target_pt)
         print(f"[+] Saved best PyTorch model checkpoint: {target_pt}")
