@@ -327,8 +327,8 @@ class FSMBeamSearchDecoder:
             curr_lp = log_probs[t]
             lp_blank = float(curr_lp[blank_idx])
 
-            # High-speed early blank skip: if blank probability is >99%, only blank emissions occur
-            if lp_blank > -0.01:
+            # High-speed early blank skip: if blank probability is >99.5%, only blank emissions occur
+            if lp_blank > -0.005:
                 for l_len, beams in beams_by_len.items():
                     for p, (pb, pnb) in beams.items():
                         beams[p] = (log_sum_exp(pb, pnb) + lp_blank, NEG_INF)
@@ -358,7 +358,9 @@ class FSMBeamSearchDecoder:
                         next_l = l_len + 1
                         for c in allowed:
                             lp_c = float(curr_lp[c])
-                            if lp_c < -4.5:
+                            # Calibrate threshold for repeat tokens to avoid collapsing triplets/doubles
+                            min_lp = -5.5 if (l_len > 0 and c == prefix[-1]) else -4.5
+                            if lp_c < min_lp:
                                 continue
                             new_pref = prefix + (c,)
                             cur_pb, cur_pnb = new_beams_by_len[next_l].get(new_pref, (NEG_INF, NEG_INF))
@@ -409,7 +411,7 @@ class FSMBeamSearchDecoder:
         beam_width: int = 10,
         blank_idx: int = BLANK_IDX,
     ) -> List[Tuple[str, float]]:
-        """
+        r"""
         Dual-line FSM Beam Search decoding for Type 1A square plates.
         Decodes top line with mask '^[ABEKMHOPCTYX]\d{3}$' (length 4)
         and bottom line with mask '^[ABEKMHOPCTYX]{2}\d{2,3}$' (length 4 or 5).
@@ -462,7 +464,7 @@ class CTCDecoder:
         log_probs: np.ndarray,
         beam_width: int = 5,
         prune_top_k: int = 8,
-        blank_threshold: float = -0.01,
+        blank_threshold: float = -0.005,
         blank_idx: int = BLANK_IDX,
     ) -> List[Tuple[str, float]]:
         """
@@ -1279,6 +1281,34 @@ class CTCDecoder:
                             key = (p_type, alt_text)
                             if key not in candidate_dict or b_val > candidate_dict[key]:
                                 candidate_dict[key] = b_val
+
+        # 3. FSM Prior: Digit Triplet & Region Counterpart Expansion
+        # Protects against CTC repeat-character collapse on dilated LPRNet-v2 (e.g. '777' <-> '77')
+        extra_cands = []
+        for p_type, text in list(candidate_dict.keys()):
+            # 3a. Region triplet expansion for Type 1B (LL DDD RR -> LL DDD RRR)
+            if p_type == "type1b" and len(text) == 7:
+                reg2 = text[5:]
+                for reg3 in ("7" + reg2, "1" + reg2, reg2 + reg2[-1]):
+                    if reg3 in VALID_3DIGIT_REGIONS:
+                        extra_cands.append(("type1b", text[:5] + reg3, 0.0))
+            # 3b. Region triplet expansion for Type 1 / 1A / Type 2 (L DDD LL RR -> L DDD LL RRR)
+            elif p_type in ("type1", "type1a", "type2") and len(text) == 8:
+                reg2 = text[6:]
+                for reg3 in ("7" + reg2, "1" + reg2, reg2 + reg2[-1]):
+                    if reg3 in VALID_3DIGIT_REGIONS:
+                        extra_cands.append((p_type, text[:6] + reg3, 0.0))
+            # 3c. Body digit triplet expansion (e.g. collapsed 7-char Type 1: L DD LL RR -> L DDD LL RR)
+            elif p_type == "type1" and len(text) == 7 and text[1] in DIGITS and text[2] in DIGITS:
+                for d_idx in (1, 2):
+                    dupl = text[:d_idx] + text[d_idx] + text[d_idx:]
+                    if PLATE_REGEX.match(dupl):
+                        extra_cands.append(("type1", dupl, 0.0))
+
+        for p_type, text, b_val in extra_cands:
+            key = (p_type, text)
+            if key not in candidate_dict or b_val > candidate_dict[key]:
+                candidate_dict[key] = b_val
 
         best_score = -1e9
         best_cand_text = raw_text

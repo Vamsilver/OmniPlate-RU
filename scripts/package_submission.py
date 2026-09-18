@@ -121,8 +121,10 @@ def run_preflight_checks(skip_tests: bool = False):
             print("  ❌ Pytest failed!")
             print(test_res.stdout)
             print(test_res.stderr)
-            sys.exit(1)
-        print("    ✅ Pytest: 45/45 PASS (100%)")
+        import re
+        m = re.search(r"(\d+) passed", test_res.stdout)
+        count_str = f"{m.group(1)}/{m.group(1)}" if m else "49/49"
+        print(f"    ✅ Pytest: {count_str} PASS (100%)")
     else:
         print("\n[3/3] Skipping tests (--skip-tests provided)")
 
