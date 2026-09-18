@@ -260,6 +260,9 @@ class PlateRectifier:
         tw, th = target_size or self.get_canonical_size(plate_type)
         return cv2.resize(crop, (tw, th), interpolation=self.interpolation)
 
+    # Convenient alias
+    rectify_bbox = rectify_bbox_fallback
+
     @classmethod
     def find_adaptive_split_seam(
         cls,

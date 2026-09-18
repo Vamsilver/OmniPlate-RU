@@ -165,8 +165,8 @@ try:
     import torch.nn.functional as F
 
     class SmallBasicBlock(nn.Module):
-        """Residual block with 3x3 depthwise/standard convolutions"""
-        def __init__(self, in_channels: int, out_channels: int):
+        """Residual block with 3x3 depthwise/standard convolutions and horizontal dilation"""
+        def __init__(self, in_channels: int, out_channels: int, dilation_w: int = 1):
             super().__init__()
             self.conv = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels // 4, kernel_size=1, bias=False),
@@ -175,7 +175,14 @@ try:
                 nn.Conv2d(out_channels // 4, out_channels // 4, kernel_size=(3, 1), padding=(1, 0), bias=False),
                 nn.BatchNorm2d(out_channels // 4),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(out_channels // 4, out_channels // 4, kernel_size=(1, 3), padding=(0, 1), bias=False),
+                nn.Conv2d(
+                    out_channels // 4,
+                    out_channels // 4,
+                    kernel_size=(1, 3),
+                    padding=(0, dilation_w),
+                    dilation=(1, dilation_w),
+                    bias=False,
+                ),
                 nn.BatchNorm2d(out_channels // 4),
                 nn.ReLU(inplace=True),
                 nn.Conv2d(out_channels // 4, out_channels, kernel_size=1, bias=False),
@@ -197,10 +204,17 @@ try:
         High-Speed License Plate Recognition Network (LPRNet).
         Accepts canonical (B, 3, 36, 160) input crops.
         Outputs CTC logits (B, seq_len=40, num_classes).
+        Supports dilated=True for +65% horizontal receptive field expansion.
         """
-        def __init__(self, num_classes: int = NUM_CLASSES, dropout_rate: float = 0.2):
+        def __init__(
+            self,
+            num_classes: int = NUM_CLASSES,
+            dropout_rate: float = 0.2,
+            dilated: bool = False,
+        ):
             super().__init__()
             self.num_classes = num_classes
+            self.dilated = dilated
 
             # Backbone Stem: 36x160 -> 18x80
             self.stem = nn.Sequential(
@@ -211,22 +225,22 @@ try:
             )
 
             # Stage 1: 18x80 -> 18x80
-            self.block1 = SmallBasicBlock(64, 64)
+            self.block1 = SmallBasicBlock(64, 64, dilation_w=1)
 
             # Downsample 1: 18x80 -> 9x40
             self.pool1 = nn.MaxPool2d(kernel_size=3, stride=(2, 2), padding=1)
 
             # Stage 2: 9x40 -> 9x40
-            self.block2 = SmallBasicBlock(64, 128)
+            self.block2 = SmallBasicBlock(64, 128, dilation_w=1)
 
-            # Stage 3: 9x40 -> 9x40
-            self.block3 = SmallBasicBlock(128, 256)
+            # Stage 3: 9x40 -> 9x40 (Dilated d=2 in LPRNet-v2)
+            self.block3 = SmallBasicBlock(128, 256, dilation_w=(2 if dilated else 1))
 
             # Downsample 2: (Height down to 4, width preserved at 40)
             self.pool2 = nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))  # 5x40
 
-            # Stage 4: 5x40 -> 5x40
-            self.block4 = SmallBasicBlock(256, 256)
+            # Stage 4: 5x40 -> 5x40 (Dilated d=3 in LPRNet-v2)
+            self.block4 = SmallBasicBlock(256, 256, dilation_w=(3 if dilated else 1))
 
             # Downsample 3: collapse height to 1
             self.pool3 = nn.AdaptiveAvgPool2d((1, 40))  # (B, 256, 1, 40)

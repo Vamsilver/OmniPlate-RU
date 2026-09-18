@@ -364,6 +364,7 @@ def main():
     parser = argparse.ArgumentParser(description="Stage 4.5 Context & Multi-Scale Expansion Benchmark")
     parser.add_argument("--max_samples", type=int, default=200, help="Max real samples for grid search")
     parser.add_argument("--device", type=str, default="cuda", help="Inference device")
+    parser.add_argument("--model_path", type=str, default=None, help="Path to OCR model checkpoint or ONNX")
     args = parser.parse_args()
 
     meta_csv = str(PROJECT_ROOT / "dataset" / "meta.csv")
@@ -373,8 +374,9 @@ def main():
     samples = load_real_samples(meta_csv, root_dir, max_samples=args.max_samples)
     print(f"[+] Loaded {len(samples)} real road plate samples.")
 
-    ocr_model_p = str(PROJECT_ROOT / "models" / "ocr_lprnet_best.onnx")
-    ocr = PlateOCR(model_path=ocr_model_p, device=args.device, use_onnx=True)
+    ocr_model_p = args.model_path or str(PROJECT_ROOT / "models" / "ocr_lprnet_best.onnx")
+    print(f"[*] Benchmarking OCR Model: {ocr_model_p}")
+    ocr = PlateOCR(model_path=ocr_model_p, device=args.device, use_onnx=ocr_model_p.endswith(".onnx"))
     rectifier = PlateRectifier()
 
     # 1. Theoretical Receptive Field Calculation
