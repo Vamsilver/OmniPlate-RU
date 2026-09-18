@@ -1,15 +1,15 @@
 ======================================================================
 OMNIPLATE-RU: SUBMISSION MANIFEST (VOLGA IT 2026)
 ======================================================================
-Generated: 2026-09-19 00:27:51
+Generated: 2026-09-19 00:39:43
 Target Competition: Volga IT 2026 (Semi-Final)
 Track: AI & Data Analysis (AIS Gorod)
 Repository: https://github.com/Vamsilver/OmniPlate-RU
 ----------------------------------------------------------------------
 ARCHIVE INFORMATION:
   File:           OmniPlate-RU_solution.zip
-  Size:           14.91 MB
-  SHA-256:        17c4c0292fbd6f5fa3d80abc61edc69afbc3cbed60e1a53033e93a63ea1e6885
+  Size:           12.86 MB
+  SHA-256:        b846b47cdf0ed61b6aa55552c42e563125cd5cb351c3f3579cef7ada2d806a57
 ----------------------------------------------------------------------
 MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):
   models/detector_yolo_pose.onnx   ( 12370.3 KB) SHA-256: cd016d886585f9c10f5e3ecb88152bbf313263c1f27b9f7e2a0b32a0ea2f2375

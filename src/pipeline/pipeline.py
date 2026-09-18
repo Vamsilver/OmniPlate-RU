@@ -655,6 +655,8 @@ class OmniPlatePipeline:
                     score_1a += 3.5
                 elif effective_ar <= 1.65:
                     score_1a += 1.5
+                elif effective_ar >= 2.15:
+                    score_1 += 5.0
                 elif effective_ar >= 1.95:
                     score_1 += 3.0
 
