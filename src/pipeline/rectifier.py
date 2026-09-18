@@ -158,6 +158,7 @@ class PlateRectifier:
         auto_order: bool = True,
         margin: Union[float, Tuple[float, float]] = 0.0,
         refine_corners: bool = False,
+        interpolation: Optional[int] = None,
     ) -> np.ndarray:
         """
         Warps the quadrilateral region defined by `quad` into a canonical rectangular crop.
@@ -171,6 +172,7 @@ class PlateRectifier:
             margin: Safety margin padding ratio (e.g. 0.035 for 3.5% padding, or (0.035, 0.025)).
                    Expands the captured region outward to prevent clipping boundary strokes of symbols.
             refine_corners: If True, applies subpixel corner refinement via local gradients.
+            interpolation: Optional OpenCV interpolation flag override (defaults to self.interpolation).
 
         Returns:
             Warped numpy array of shape (target_h, target_w, C).
@@ -213,12 +215,14 @@ class PlateRectifier:
         # Compute homography transformation matrix
         M = cv2.getPerspectiveTransform(src_pts, dst_pts)
 
+        interp_flag = self.interpolation if interpolation is None else interpolation
+
         # Perform fast perspective warp
         warped = cv2.warpPerspective(
             image,
             M,
             (target_w, target_h),
-            flags=self.interpolation,
+            flags=interp_flag,
             borderMode=cv2.BORDER_REPLICATE,
         )
 

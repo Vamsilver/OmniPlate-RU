@@ -632,7 +632,7 @@ class OmniPlatePipeline:
 
                 # 2. Hypothesis B (Type 1 Direct)
                 do_refine_1 = (bh >= 22)
-                rect_1 = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.010, 0.005), refine_corners=do_refine_1)
+                rect_1 = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.012, 0.006), refine_corners=do_refine_1)
                 ocr_res_1 = self.ocr.predict_single(rect_1, plate_type="type1", return_type=True)
 
                 if len(ocr_res_1) == 3:
@@ -693,7 +693,7 @@ class OmniPlatePipeline:
             else:
                 # Definite Type 1 Single-Line Plate (AR > 2.10)
                 do_refine = (bh >= 22)
-                rectified = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.010, 0.005), refine_corners=do_refine)
+                rectified = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.012, 0.006), refine_corners=do_refine)
                 detection.rectified_crop = rectified
                 ocr_res = self.ocr.predict_single(rectified, plate_type="type1", return_type=True)
                 if len(ocr_res) == 3:
@@ -845,7 +845,7 @@ class OmniPlatePipeline:
                     valid_entries.append((idx, "type1b", rectified))
                 else:
                     do_refine = (det.bbox[3] >= 22)
-                    rectified = self.rectifier.rectify(image, det.quad, plate_type="type1", margin=(0.010, 0.005), refine_corners=do_refine)
+                    rectified = self.rectifier.rectify(image, det.quad, plate_type="type1", margin=(0.012, 0.006), refine_corners=do_refine)
                     det.rectified_crop = rectified
                     crops_to_ocr.append(rectified)
                     types_to_ocr.append("type1")
