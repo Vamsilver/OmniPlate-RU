@@ -105,7 +105,7 @@ def run_inference(
     input_path: Path,
     output_csv: Path,
     device: str = "cuda",
-    conf_threshold: float = 0.06,
+    conf_threshold: float = 0.12,
     iou_threshold: float = 0.45,
     save_vis_dir: Optional[Path] = None,
     verbose: bool = False,

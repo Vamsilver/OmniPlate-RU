@@ -94,12 +94,14 @@ class OmniPlatePipeline:
         iou_threshold: float = 0.45,
         imgsz: int = 640,
         use_onnx: bool = True,
+        ocr_1a_mode: str = "ensemble",
     ) -> None:
         self.device = self._resolve_device(device)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.imgsz = imgsz
         self.use_onnx = use_onnx
+        self.ocr_1a_mode = ocr_1a_mode
 
         # Resolve model paths
         self.detector_path = self._resolve_model_path(
@@ -592,28 +594,45 @@ class OmniPlatePipeline:
                 # Evaluate dual hypothesis (1A Stitched vs 1 Direct) to protect against
                 # perspective distortion turning 1-line into faux-square or vice versa.
                 # 1. Hypothesis A (Type 1A Stitched)
-                rect_1a = self.rectifier.rectify(image, detection.quad, plate_type="type1a", margin=(0.015, 0.010), refine_corners=False)
+                rect_1a = self.rectifier.rectify(image, detection.quad, plate_type="type1a", margin=(0.020, 0.015), refine_corners=True)
                 h_1a = rect_1a.shape[0]
                 mid_1a = self.rectifier.find_adaptive_split_seam(rect_1a)
                 top_l = rect_1a[:mid_1a, :]
                 bot_l = rect_1a[mid_1a:, :]
-                stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
-                text_1a, conf_1a = self.ocr.predict_single(stitched_1a, plate_type="type1a")
+                if self.ocr_1a_mode == "dual" and hasattr(self.ocr, "predict_type1a_dual"):
+                    text_1a, conf_1a = self.ocr.predict_type1a_dual(top_l, bot_l)
+                    stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
+                elif self.ocr_1a_mode == "stitch" or not hasattr(self.ocr, "predict_type1a_dual"):
+                    stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
+                    text_1a, conf_1a = self.ocr.predict_single(stitched_1a, plate_type="type1a")
 
-                # Multi-seam fallback: if wildcards present, invalid syntax, or marginal confidence < 0.70, try micro-offsets
-                if plate_type == "type1a" and ("#" in text_1a or not is_valid_gost_plate(text_1a, "type1a") or conf_1a < 0.70):
-                    for dy in (2, -2):
-                        y_alt = mid_1a + dy
-                        if 15 < y_alt < h_1a - 15:
-                            s_alt = self.rectifier.stitch_type1a_horizontal(rect_1a[:y_alt, :], rect_1a[y_alt:, :], target_size=(160, 36))
-                            t_alt, c_alt = self.ocr.predict_single(s_alt, plate_type="type1a")
-                            score_curr = (1.0 if is_valid_gost_plate(text_1a, "type1a") else 0.0) * 5.0 - text_1a.count("#") * 3.0 + conf_1a * 3.0
-                            score_alt = (1.0 if is_valid_gost_plate(t_alt, "type1a") else 0.0) * 5.0 - t_alt.count("#") * 3.0 + c_alt * 3.0
-                            if score_alt > score_curr:
-                                text_1a, conf_1a, stitched_1a = t_alt, c_alt, s_alt
+                    # Multi-seam fallback: if wildcards present, invalid syntax, or marginal confidence < 0.70, try micro-offsets
+                    if plate_type == "type1a" and ("#" in text_1a or not is_valid_gost_plate(text_1a, "type1a") or conf_1a < 0.70):
+                        for dy in (2, -2):
+                            y_alt = mid_1a + dy
+                            if 15 < y_alt < h_1a - 15:
+                                s_alt = self.rectifier.stitch_type1a_horizontal(rect_1a[:y_alt, :], rect_1a[y_alt:, :], target_size=(160, 36))
+                                t_alt, c_alt = self.ocr.predict_single(s_alt, plate_type="type1a")
+                                score_curr = (1.0 if is_valid_gost_plate(text_1a, "type1a") else 0.0) * 5.0 - text_1a.count("#") * 3.0 + conf_1a * 3.0
+                                score_alt = (1.0 if is_valid_gost_plate(t_alt, "type1a") else 0.0) * 5.0 - t_alt.count("#") * 3.0 + c_alt * 3.0
+                                if score_alt > score_curr:
+                                    text_1a, conf_1a, stitched_1a = t_alt, c_alt, s_alt
+                else:  # "ensemble"
+                    stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
+                    text_1a_ss, conf_1a_ss = self.ocr.predict_single(stitched_1a, plate_type="type1a")
+                    text_1a_dp, conf_1a_dp = self.ocr.predict_type1a_dual(top_l, bot_l)
+                    v_ss = is_valid_gost_plate(text_1a_ss, "type1a")
+                    v_dp = is_valid_gost_plate(text_1a_dp, "type1a")
+                    score_ss = conf_1a_ss * 10.0 - text_1a_ss.count("#") * 3.5 + (4.0 if v_ss else 0.0)
+                    score_dp = conf_1a_dp * 10.0 - text_1a_dp.count("#") * 3.5 + (4.0 if v_dp else 0.0) + 0.8
+                    if score_dp > score_ss:
+                        text_1a, conf_1a = text_1a_dp, conf_1a_dp
+                    else:
+                        text_1a, conf_1a = text_1a_ss, conf_1a_ss
 
                 # 2. Hypothesis B (Type 1 Direct)
-                rect_1 = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.010, 0.010), refine_corners=False)
+                do_refine_1 = (bh >= 22)
+                rect_1 = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.010, 0.005), refine_corners=do_refine_1)
                 ocr_res_1 = self.ocr.predict_single(rect_1, plate_type="type1", return_type=True)
 
                 if len(ocr_res_1) == 3:
@@ -644,8 +663,12 @@ class OmniPlatePipeline:
                 elif plate_type == "type1":
                     score_1 += 1.5 * min(1.0, max(0.2, detection.confidence))
 
-                # Prioritize valid GOST if one is valid with high confidence and other is not
-                if v_1_valid and conf_1 >= 0.70 and not v_1a_valid:
+                # Clear confidence dominance rule: if Type 1 has high confidence and clearly outperforms 1A
+                if v_1_valid and conf_1 >= 0.80 and (conf_1 - conf_1a >= 0.25):
+                    score_1 += 8.0
+                elif v_1a_valid and conf_1a >= 0.80 and (conf_1a - conf_1 >= 0.25):
+                    score_1a += 8.0
+                elif v_1_valid and conf_1 >= 0.70 and not v_1a_valid:
                     score_1 += 4.0
                 elif v_1a_valid and conf_1a >= 0.70 and not v_1_valid:
                     score_1a += 4.0
@@ -667,7 +690,8 @@ class OmniPlatePipeline:
 
             else:
                 # Definite Type 1 Single-Line Plate (AR > 2.10)
-                rectified = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.010, 0.010), refine_corners=False)
+                do_refine = (bh >= 22)
+                rectified = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.010, 0.005), refine_corners=do_refine)
                 detection.rectified_crop = rectified
                 ocr_res = self.ocr.predict_single(rectified, plate_type="type1", return_type=True)
                 if len(ocr_res) == 3:
@@ -714,11 +738,13 @@ class OmniPlatePipeline:
                         detection.text = ""
                         detection.ocr_confidence = 0.0
                 else:
-                    # Type 1A confirmed valid: only reject on extreme verifier failure (stitched crop scores differ)
-                    if detection.plate_type == "type1a" and is_gost_strict and detection.ocr_confidence >= 0.65 and detection.confidence >= 0.50 and not detection.is_soft_fallback:
-                        is_non_plate = (p_score < 0.001)
+                    # Type 1A confirmed valid: stitched crops have artificial seam, verifier p_score is not calibrated for stitched crops when OCR is strictly valid
+                    if detection.plate_type == "type1a" and is_gost_strict and detection.ocr_confidence >= 0.50 and detection.confidence >= 0.45 and not detection.is_soft_fallback:
+                        is_non_plate = False
+                    elif detection.plate_type == "type1a" and is_gost_strict and detection.ocr_confidence >= 0.65 and detection.confidence >= 0.50 and not detection.is_soft_fallback:
+                        is_non_plate = (p_score < 0.0001)
                     elif is_gost_strict and detection.ocr_confidence >= 0.70 and detection.confidence >= 0.50 and not detection.is_soft_fallback:
-                        is_non_plate = (p_score < 0.34)
+                        is_non_plate = (p_score < 0.20)
                     else:
                         is_non_plate = (not is_plate)
 
@@ -727,13 +753,16 @@ class OmniPlatePipeline:
                         is_non_plate = True
 
                     # Joint confidence guard: prevent low-confidence background hallucination
-                    if (
-                        (detection.confidence < 0.25 and detection.ocr_confidence < 0.65)
-                        or (detection.confidence < 0.40 and detection.ocr_confidence < 0.45)
-                        or (detection.confidence * detection.ocr_confidence) < 0.10
-                        or detection.ocr_confidence < 0.30
-                    ):
-                        is_non_plate = True
+                    is_high_conf_gost = is_gost_strict and detection.ocr_confidence >= 0.85 and (detection.confidence * detection.ocr_confidence) >= 0.07
+                    if not is_high_conf_gost:
+                        if (
+                            (detection.confidence < 0.25 and detection.ocr_confidence < 0.65)
+                            or (detection.confidence < 0.40 and detection.ocr_confidence < 0.70)
+                            or (detection.confidence < 0.50 and detection.ocr_confidence < 0.50)
+                            or (detection.confidence * detection.ocr_confidence) < 0.18
+                            or detection.ocr_confidence < 0.35
+                        ):
+                            is_non_plate = True
 
                     # GOST format guard: reject plates that don't match any valid Russian format
                     is_invalid_ocr = not is_gost_strict
@@ -806,13 +835,14 @@ class OmniPlatePipeline:
                     types_to_ocr.append("type1a")
                     valid_entries.append((idx, "type1a", rectified))
                 elif det.plate_type == "type1b":
-                    rectified = self.rectifier.rectify(image, det.quad, plate_type="type1b", margin=(0.020, 0.015), refine_corners=False)
+                    rectified = self.rectifier.rectify(image, det.quad, plate_type="type1b", margin=(0.020, 0.015), refine_corners=True)
                     det.rectified_crop = rectified
                     crops_to_ocr.append(rectified)
                     types_to_ocr.append("type1b")
                     valid_entries.append((idx, "type1b", rectified))
                 else:
-                    rectified = self.rectifier.rectify(image, det.quad, plate_type="type1", margin=(0.010, 0.010), refine_corners=False)
+                    do_refine = (det.bbox[3] >= 22)
+                    rectified = self.rectifier.rectify(image, det.quad, plate_type="type1", margin=(0.010, 0.005), refine_corners=do_refine)
                     det.rectified_crop = rectified
                     crops_to_ocr.append(rectified)
                     types_to_ocr.append("type1")
@@ -883,7 +913,7 @@ class OmniPlatePipeline:
                     if det.plate_type == "type1a" and is_gost_strict and det.ocr_confidence >= 0.65 and det.confidence >= 0.50 and not det.is_soft_fallback:
                         is_non_plate = (p_score < 0.001)
                     elif is_gost_strict and det.ocr_confidence >= 0.70 and det.confidence >= 0.50 and not det.is_soft_fallback:
-                        is_non_plate = (p_score < 0.34)
+                        is_non_plate = (p_score < 0.20)
                     else:
                         is_non_plate = (not is_plate)
 
@@ -892,13 +922,16 @@ class OmniPlatePipeline:
                         is_non_plate = True
 
                     # Joint confidence guard: prevent low-confidence background hallucination
-                    if (
-                        (det.confidence < 0.25 and det.ocr_confidence < 0.65)
-                        or (det.confidence < 0.40 and det.ocr_confidence < 0.45)
-                        or (det.confidence * det.ocr_confidence) < 0.10
-                        or det.ocr_confidence < 0.30
-                    ):
-                        is_non_plate = True
+                    is_high_conf_gost = is_gost_strict and det.ocr_confidence >= 0.85 and (det.confidence * det.ocr_confidence) >= 0.07
+                    if not is_high_conf_gost:
+                        if (
+                            (det.confidence < 0.25 and det.ocr_confidence < 0.65)
+                            or (det.confidence < 0.40 and det.ocr_confidence < 0.70)
+                            or (det.confidence < 0.50 and det.ocr_confidence < 0.50)
+                            or (det.confidence * det.ocr_confidence) < 0.18
+                            or det.ocr_confidence < 0.35
+                        ):
+                            is_non_plate = True
 
                     # GOST format guard: reject plates that don't match any valid Russian format
                     is_invalid_ocr = not is_gost_strict

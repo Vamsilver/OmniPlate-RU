@@ -39,6 +39,9 @@ class DummyOCR:
             res.append((r[0], r[1], pt))
         return res
 
+    def predict_type1a_dual(self, top_crop: np.ndarray, bot_crop: np.ndarray, *args, **kwargs):
+        return "A123BC77", 0.95
+
 
 
 class TestOmniPlatePipeline(unittest.TestCase):

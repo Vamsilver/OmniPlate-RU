@@ -256,13 +256,17 @@ class FSMBeamSearchDecoder:
     LETTER_INDICES: Tuple[int, ...] = tuple(CHAR2IDX[l] for l in LETTERS)
 
     ALLOWED_TABLE: Dict[str, Dict[int, Tuple[int, ...]]] = {}
-    for _pt in ("type1", "type1a", "type1b", "type2", "trailer"):
+    for _pt in ("type1", "type1a", "type1b", "type2", "trailer", "type1a_top", "type1a_bot"):
         ALLOWED_TABLE[_pt] = {}
         for _llen in range(10):
             if _pt in ("type1", "type1a"):
                 ALLOWED_TABLE[_pt][_llen] = () if _llen >= 9 else (LETTER_INDICES if _llen in (0, 4, 5) else DIGIT_INDICES)
             elif _pt == "type1b":
                 ALLOWED_TABLE[_pt][_llen] = () if _llen >= 8 else (LETTER_INDICES if _llen in (0, 1) else DIGIT_INDICES)
+            elif _pt == "type1a_top":
+                ALLOWED_TABLE[_pt][_llen] = () if _llen >= 4 else (LETTER_INDICES if _llen == 0 else DIGIT_INDICES)
+            elif _pt == "type1a_bot":
+                ALLOWED_TABLE[_pt][_llen] = () if _llen >= 5 else (LETTER_INDICES if _llen in (0, 1) else DIGIT_INDICES)
             else:
                 ALLOWED_TABLE[_pt][_llen] = () if _llen >= 9 else (LETTER_INDICES if _llen in (0, 1) else DIGIT_INDICES)
 
@@ -301,8 +305,18 @@ class FSMBeamSearchDecoder:
                 return b + (math.log1p(math.exp(diff)) if diff > -37.0 else 0.0)
 
         norm_type = plate_type.lower().strip()
-        max_target_len = 8 if norm_type == "type1b" else 9
-        min_target_len = 7 if norm_type == "type1b" else 8
+        if norm_type == "type1a_top":
+            min_target_len = 4
+            max_target_len = 4
+        elif norm_type == "type1a_bot":
+            min_target_len = 4
+            max_target_len = 5
+        elif norm_type == "type1b":
+            min_target_len = 7
+            max_target_len = 8
+        else:
+            min_target_len = 8
+            max_target_len = 9
         table = cls.ALLOWED_TABLE.get(norm_type, cls.ALLOWED_TABLE["type1"])
 
         beams_by_len: Dict[int, Dict[Tuple[int, ...], Tuple[float, float]]] = {
@@ -367,16 +381,57 @@ class FSMBeamSearchDecoder:
                 text = "".join(IDX2CHAR[idx] for idx in pref)
                 score = log_sum_exp(pb, pnb)
                 norm_score = score / float(l_len)
-                reg_start = 5 if norm_type == "type1b" else 6
-                reg = text[reg_start:]
-                if is_valid_region(reg):
-                    norm_score += 0.25 + REGION_FREQUENCY_WEIGHTS.get(reg, 0.0)
+                if norm_type == "type1a_top":
+                    pass
+                elif norm_type == "type1a_bot":
+                    reg = text[2:]
+                    if is_valid_region(reg):
+                        norm_score += 0.25 + REGION_FREQUENCY_WEIGHTS.get(reg, 0.0)
+                    else:
+                        norm_score -= 3.0
                 else:
-                    norm_score -= 3.0
+                    reg_start = 5 if norm_type == "type1b" else 6
+                    reg = text[reg_start:]
+                    if is_valid_region(reg):
+                        norm_score += 0.25 + REGION_FREQUENCY_WEIGHTS.get(reg, 0.0)
+                    else:
+                        norm_score -= 3.0
                 candidates.append((text, norm_score))
 
         candidates.sort(key=lambda x: x[1], reverse=True)
         return candidates[:beam_width]
+
+    @classmethod
+    def decode_fsm_type1a_dual(
+        cls,
+        top_logits: np.ndarray,
+        bot_logits: np.ndarray,
+        beam_width: int = 10,
+        blank_idx: int = BLANK_IDX,
+    ) -> List[Tuple[str, float]]:
+        """
+        Dual-line FSM Beam Search decoding for Type 1A square plates.
+        Decodes top line with mask '^[ABEKMHOPCTYX]\d{3}$' (length 4)
+        and bottom line with mask '^[ABEKMHOPCTYX]{2}\d{2,3}$' (length 4 or 5).
+        Combines candidates (text = top + bot) and returns sorted results.
+        """
+        top_cands = cls.decode_fsm_beam_search(
+            top_logits, plate_type="type1a_top", beam_width=beam_width, blank_idx=blank_idx
+        )
+        bot_cands = cls.decode_fsm_beam_search(
+            bot_logits, plate_type="type1a_bot", beam_width=beam_width, blank_idx=blank_idx
+        )
+        if not top_cands or not bot_cands:
+            return []
+
+        combined = []
+        for t_text, t_score in top_cands[:min(3, len(top_cands))]:
+            for b_text, b_score in bot_cands[:min(3, len(bot_cands))]:
+                full_text = t_text + b_text
+                joint_score = (t_score * len(t_text) + b_score * len(b_text)) / float(len(full_text))
+                combined.append((full_text, joint_score))
+        combined.sort(key=lambda x: x[1], reverse=True)
+        return combined[:beam_width]
 
 
 class CTCDecoder:
@@ -572,6 +627,85 @@ class CTCDecoder:
             chars = list(stripped)
             if norm_type in ("type2", "trailer", "type_2"):
                 norm_type = "type1"
+
+        # -------------------------------------------------------------------
+        # 0a. Type 1A Top Line (type1a_top: L DDD - 4 chars)
+        # -------------------------------------------------------------------
+        if norm_type == "type1a_top":
+            if len(chars) > 4:
+                best_sub = chars[:4]
+                best_sc = -999
+                for s in range(len(chars) - 3):
+                    sub = chars[s : s + 4]
+                    sc = 0
+                    if sub[0] in LETTERS: sc += 3
+                    elif sub[0] in DIGIT_TO_LETTER and DIGIT_TO_LETTER[sub[0]] in LETTERS: sc += 1
+                    for dp in range(1, 4):
+                        if sub[dp] in DIGITS: sc += 3
+                        elif sub[dp] in LETTER_TO_DIGIT: sc += 1
+                    if sc > best_sc:
+                        best_sc = sc
+                        best_sub = sub
+                chars = best_sub
+            while len(chars) < 4:
+                chars.append("#")
+            if chars[0] in LETTERS:
+                pass
+            elif chars[0] in DIGIT_TO_LETTER and DIGIT_TO_LETTER[chars[0]] in LETTERS:
+                chars[0] = DIGIT_TO_LETTER[chars[0]]
+            else:
+                chars[0] = "#"
+            for pos in (1, 2, 3):
+                if chars[pos] in DIGITS:
+                    pass
+                elif chars[pos] in LETTER_TO_DIGIT:
+                    chars[pos] = LETTER_TO_DIGIT[chars[pos]]
+                else:
+                    chars[pos] = "#"
+            return "".join(chars[:4])
+
+        # -------------------------------------------------------------------
+        # 0b. Type 1A Bottom Line (type1a_bot: LL RR / LL RRR - 4 or 5 chars)
+        # -------------------------------------------------------------------
+        if norm_type == "type1a_bot":
+            if len(chars) > 5:
+                best_sub = chars[:5]
+                best_sc = -999
+                for w_len in (4, 5):
+                    for s in range(len(chars) - w_len + 1):
+                        sub = chars[s : s + w_len]
+                        sc = 0
+                        for lp in (0, 1):
+                            if sub[lp] in LETTERS: sc += 3
+                            elif sub[lp] in DIGIT_TO_LETTER and DIGIT_TO_LETTER[sub[lp]] in LETTERS: sc += 1
+                        for dp in range(2, w_len):
+                            if sub[dp] in DIGITS: sc += 3
+                            elif sub[dp] in LETTER_TO_DIGIT: sc += 1
+                        if sc > best_sc:
+                            best_sc = sc
+                            best_sub = sub
+                chars = best_sub
+            while len(chars) < 4:
+                chars.append("#")
+            for pos in (0, 1):
+                if pos < len(chars):
+                    if chars[pos] in LETTERS:
+                        pass
+                    elif chars[pos] in DIGIT_TO_LETTER and DIGIT_TO_LETTER[chars[pos]] in LETTERS:
+                        chars[pos] = DIGIT_TO_LETTER[chars[pos]]
+                    else:
+                        chars[pos] = "#"
+            for pos in range(2, len(chars)):
+                if chars[pos] in DIGITS:
+                    pass
+                elif chars[pos] in LETTER_TO_DIGIT:
+                    chars[pos] = LETTER_TO_DIGIT[chars[pos]]
+                else:
+                    chars[pos] = "#"
+            if len(chars) == 5 and all(c in DIGITS or c == "#" for c in chars[2:]):
+                raw_reg = "".join(chars[2:])
+                chars[2:] = list(CTCDecoder.repair_3digit_region(raw_reg))
+            return "".join(chars[:5])
 
         # -------------------------------------------------------------------
         # 1. Russian Trailer format (Type 2: LL DDDD RR / LL DDDD RRR)

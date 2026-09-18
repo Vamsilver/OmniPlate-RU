@@ -82,6 +82,7 @@ dataset/candidates_review/
 dataset/audit_previews/
 dataset/verified_previews/
 dataset/inspect_*/
+dataset/type1a_lines/
 dataset/*backup*.csv
 dataset/audit_results.csv
 *.bak*

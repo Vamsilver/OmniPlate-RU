@@ -538,5 +538,64 @@ class PlateOCR:
 
         return results
 
+    def predict_type1a_dual(
+        self,
+        top_crop: np.ndarray,
+        bot_crop: np.ndarray,
+        beam_width: int = 10,
+    ) -> Tuple[str, float]:
+        """
+        Dual-Line Pass OCR for Russian Type 1A square plates using already trained LPRNet:
+        1. Resizes top line crop to (160, 36) and bot line crop to (160, 36).
+        2. Inferences both in a single neural forward pass (batch size 2).
+        3. Decodes top line with mask '^[ABEKMHOPCTYX]\d{3}$' (length 4).
+        4. Decodes bottom line with mask '^[ABEKMHOPCTYX]{2}\d{2,3}$' (length 4 or 5).
+        5. Concatenates: text = top_text + bot_text.
+        Returns:
+            (plate_text, confidence)
+        """
+        import cv2
+        if top_crop is None or bot_crop is None:
+            return "", 0.0
 
+        h_t, w_t = top_crop.shape[:2]
+        if (w_t, h_t) != (160, 36):
+            top_crop = cv2.resize(top_crop, (160, 36), interpolation=cv2.INTER_LINEAR)
 
+        h_b, w_b = bot_crop.shape[:2]
+        if (w_b, h_b) != (160, 36):
+            bot_crop = cv2.resize(bot_crop, (160, 36), interpolation=cv2.INTER_LINEAR)
+
+        t_top = self.preprocess(top_crop, apply_clahe=False)
+        t_bot = self.preprocess(bot_crop, apply_clahe=False)
+        batch_tensor = np.concatenate([t_top, t_bot], axis=0)  # (2, 3, 36, 160)
+
+        if self.use_onnx and self.session is not None:
+            input_name = self.session.get_inputs()[0].name
+            logits_batch = self.session.run(None, {input_name: batch_tensor})[0]  # (2, 40, num_classes)
+        elif self.model is not None:
+            t = torch.from_numpy(batch_tensor).to(self.device)
+            with torch.no_grad():
+                logits_batch = self.model(t).cpu().numpy()
+        else:
+            raise RuntimeError("OCR model is not loaded!")
+
+        dual_results = FSMBeamSearchDecoder.decode_fsm_type1a_dual(
+            logits_batch[0],
+            logits_batch[1],
+            beam_width=beam_width,
+            blank_idx=BLANK_IDX,
+        )
+
+        if dual_results:
+            best_text, best_score = dual_results[0]
+            conf = float(np.clip(np.exp(min(0.0, best_score)), 0.05, 0.99))
+            return best_text, round(conf, 4)
+
+        # Fallback to greedy if beam search returned empty
+        top_greedy = CTCDecoder.decode_greedy(np.argmax(logits_batch[0], axis=-1))
+        bot_greedy = CTCDecoder.decode_greedy(np.argmax(logits_batch[1], axis=-1))
+        clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1")[:4]
+        clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
+        text = clean_top + clean_bot
+        return text, 0.5000

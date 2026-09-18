@@ -120,6 +120,33 @@ class PlateCropDataset(Dataset):
                                 real_curated.append(sample_item)
             print(f"[+] Loaded {len(real_curated)} real plate crops and {len(synth_hard)} hard synth crops from {manifest_path}")
 
+        # 3. Ingest procedural Type 1A line crops (160x36, L DDD and LL RR/RRR)
+        t1a_lines_manifest = os.path.join(self.root_dir, "type1a_lines", "manifest.csv")
+        t1a_lines_real = []
+        t1a_lines_synth = []
+        if os.path.exists(t1a_lines_manifest):
+            with open(t1a_lines_manifest, "r", encoding="utf-8") as lf:
+                l_reader = csv.reader(lf, delimiter=";")
+                next(l_reader, None)
+                for l_row in l_reader:
+                    if len(l_row) >= 6:
+                        c_file, p_num, p_type, conf, src_val, is_syn = l_row[:6]
+                        c_full_p = os.path.join(self.root_dir, c_file)
+                        if os.path.exists(c_full_p):
+                            line_item = {
+                                "img_rel": c_file,
+                                "plate_num": p_num,
+                                "plate_type": p_type,
+                                "quad": "",
+                                "bbox": "",
+                                "is_pre_cropped": True,
+                            }
+                            if is_syn == "1":
+                                t1a_lines_synth.append(line_item)
+                            else:
+                                t1a_lines_real.append(line_item)
+            print(f"[+] Loaded {len(t1a_lines_real)} real and {len(t1a_lines_synth)} synth Type 1A line crops from {t1a_lines_manifest}")
+
         # Deterministic split
         random.seed(seed)
         random.shuffle(synth_samples)
@@ -142,6 +169,16 @@ class PlateCropDataset(Dataset):
         real_train = real_curated[real_val_idx:]
         real_val = real_curated[:real_val_idx]
 
+        random.shuffle(t1a_lines_synth)
+        t1a_synth_val_idx = max(1, int(len(t1a_lines_synth) * val_split))
+        t1a_synth_train = t1a_lines_synth[t1a_synth_val_idx:]
+        t1a_synth_val = t1a_lines_synth[:t1a_synth_val_idx]
+
+        random.shuffle(t1a_lines_real)
+        t1a_real_val_idx = max(1, int(len(t1a_lines_real) * val_split))
+        t1a_real_train = t1a_lines_real[t1a_real_val_idx:]
+        t1a_real_val = t1a_lines_real[:t1a_real_val_idx]
+
         if is_train:
             # Oversample real road samples so model deeply learns real camera artifacts, fonts, and angles
             oversampled_real = []
@@ -156,17 +193,37 @@ class PlateCropDataset(Dataset):
             extra_t1_real = [s for s in (real_train + real_meta_train) if s["plate_type"] == "type1" and "#" not in s["plate_num"]]
             for _ in range(3):
                 oversampled_real.extend(extra_t1_real)
-            self.samples = synth_train + hard_train + oversampled_real
+            # Targeted 1A line crops: oversample real road 1A lines so model masters wide (40 px) characters on real cameras
+            oversampled_1a_lines = []
+            for _ in range(4):
+                oversampled_1a_lines.extend(t1a_real_train)
+
+            self.samples = (
+                synth_train
+                + hard_train
+                + oversampled_real
+                + t1a_synth_train
+                + oversampled_1a_lines
+            )
             random.shuffle(self.samples)
             print(
                 f"[TRAIN] Total: {len(self.samples)} ({len(synth_train)} synth + {len(hard_train)} hard synth + "
-                f"{len(oversampled_real)} oversampled real/1A [{len(real_train) + len(real_meta_train)} unique real])"
+                f"{len(oversampled_real)} oversampled real/1A [{len(real_train) + len(real_meta_train)} unique real] + "
+                f"{len(t1a_synth_train)} synth 1A lines + {len(oversampled_1a_lines)} oversampled real 1A lines [{len(t1a_real_train)} unique])"
             )
         else:
-            self.samples = synth_val + hard_val + real_val + real_meta_val
+            self.samples = (
+                synth_val
+                + hard_val
+                + real_val
+                + real_meta_val
+                + t1a_synth_val
+                + t1a_real_val
+            )
             print(
                 f"[VAL] Total: {len(self.samples)} ({len(synth_val)} synth + "
-                f"{len(hard_val)} hard synth + {len(real_val) + len(real_meta_val)} real [{len(real_val)} curated + {len(real_meta_val)} meta])"
+                f"{len(hard_val)} hard synth + {len(real_val) + len(real_meta_val)} real [{len(real_val)} curated + {len(real_meta_val)} meta] + "
+                f"{len(t1a_synth_val) + len(t1a_real_val)} 1A lines [{len(t1a_synth_val)} synth + {len(t1a_real_val)} real])"
             )
 
         # Pre-cache crops in RAM to eliminate disk I/O bottlenecks during training
@@ -431,8 +488,8 @@ def train_ocr(args):
         val_total = 0
         val_char_correct = 0
         val_char_total = 0
-        by_type_correct = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0}
-        by_type_total = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0}
+        by_type_correct = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0, "type1a_top": 0, "type1a_bot": 0}
+        by_type_total = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0, "type1a_top": 0, "type1a_bot": 0}
 
         sample_preds = []
         with torch.no_grad():
@@ -467,12 +524,14 @@ def train_ocr(args):
         acc_1a = (by_type_correct["type1a"] / max(1, by_type_total["type1a"])) * 100.0
         acc_1b = (by_type_correct["type1b"] / max(1, by_type_total["type1b"])) * 100.0
         acc_t2 = (by_type_correct["type2"] / max(1, by_type_total["type2"])) * 100.0
+        acc_top = (by_type_correct["type1a_top"] / max(1, by_type_total["type1a_top"])) * 100.0
+        acc_bot = (by_type_correct["type1a_bot"] / max(1, by_type_total["type1a_bot"])) * 100.0
         elapsed = time.time() - start_t
 
         print(
             f"Epoch [{epoch:02d}/{args.epochs:02d}] "
             f"Loss: {train_loss:.4f} | "
-            f"Val: {seq_acc:.1f}% (T1:{acc_t1:.0f}% 1A:{acc_1a:.0f}% 1B:{acc_1b:.0f}% T2:{acc_t2:.0f}%) | "
+            f"Val: {seq_acc:.1f}% (T1:{acc_t1:.0f}% 1A:{acc_1a:.0f}% 1B:{acc_1b:.0f}% T2:{acc_t2:.0f}% Top:{acc_top:.0f}% Bot:{acc_bot:.0f}%) | "
             f"Char: {char_acc:.1f}% | "
             f"Time: {elapsed:.1f}s"
         )
