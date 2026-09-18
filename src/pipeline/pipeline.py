@@ -753,12 +753,13 @@ class OmniPlatePipeline:
                         is_non_plate = True
 
                     # Joint confidence guard: prevent low-confidence background hallucination
-                    is_high_conf_gost = is_gost_strict and detection.ocr_confidence >= 0.85 and (detection.confidence * detection.ocr_confidence) >= 0.07
+                    is_high_conf_gost = is_gost_strict and detection.ocr_confidence >= 0.85 and (detection.confidence * detection.ocr_confidence) >= 0.08 and detection.confidence >= 0.10
                     if not is_high_conf_gost:
                         if (
-                            (detection.confidence < 0.25 and detection.ocr_confidence < 0.65)
+                            detection.confidence < 0.10
+                            or (detection.confidence < 0.25 and detection.ocr_confidence < 0.65)
                             or (detection.confidence < 0.40 and detection.ocr_confidence < 0.70)
-                            or (detection.confidence < 0.50 and detection.ocr_confidence < 0.50)
+                            or (detection.confidence < 0.50 and detection.ocr_confidence < 0.55)
                             or (detection.confidence * detection.ocr_confidence) < 0.18
                             or detection.ocr_confidence < 0.35
                         ):
@@ -922,12 +923,13 @@ class OmniPlatePipeline:
                         is_non_plate = True
 
                     # Joint confidence guard: prevent low-confidence background hallucination
-                    is_high_conf_gost = is_gost_strict and det.ocr_confidence >= 0.85 and (det.confidence * det.ocr_confidence) >= 0.07
+                    is_high_conf_gost = is_gost_strict and det.ocr_confidence >= 0.85 and (det.confidence * det.ocr_confidence) >= 0.08 and det.confidence >= 0.10
                     if not is_high_conf_gost:
                         if (
-                            (det.confidence < 0.25 and det.ocr_confidence < 0.65)
+                            det.confidence < 0.10
+                            or (det.confidence < 0.25 and det.ocr_confidence < 0.65)
                             or (det.confidence < 0.40 and det.ocr_confidence < 0.70)
-                            or (det.confidence < 0.50 and det.ocr_confidence < 0.50)
+                            or (det.confidence < 0.50 and det.ocr_confidence < 0.55)
                             or (det.confidence * det.ocr_confidence) < 0.18
                             or det.ocr_confidence < 0.35
                         ):

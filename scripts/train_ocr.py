@@ -191,7 +191,7 @@ class PlateCropDataset(Dataset):
                 oversampled_real.extend(extra_1a)
             # Targeted Type 1 boost on clean real road plates to reinforce real camera fonts
             extra_t1_real = [s for s in (real_train + real_meta_train) if s["plate_type"] == "type1" and "#" not in s["plate_num"]]
-            for _ in range(3):
+            for _ in range(6):
                 oversampled_real.extend(extra_t1_real)
             # Targeted 1A line crops: oversample real road 1A lines so model masters wide (40 px) characters on real cameras
             oversampled_1a_lines = []
@@ -284,10 +284,10 @@ class PlateCropDataset(Dataset):
         if self.is_train:
             h, w = crop.shape[:2]
 
-            # 1. Angled Motion blur or Gaussian blur (camera shake, high-speed vehicle movement)
-            if random.random() < 0.30:
-                k = random.choice([3, 5, 7, 9])
-                angle = random.uniform(-25.0, 25.0)
+            # 1. Angled Motion blur or Gaussian defocus blur (camera shake, high-speed vehicle movement)
+            if random.random() < 0.45:
+                k = random.choice([3, 5, 7, 9, 11])
+                angle = random.uniform(-35.0, 35.0)
                 kernel = np.zeros((k, k), dtype=np.float32)
                 kernel[k // 2, :] = 1.0
                 M_rot = cv2.getRotationMatrix2D((k / 2.0 - 0.5, k / 2.0 - 0.5), angle, 1.0)
@@ -295,8 +295,8 @@ class PlateCropDataset(Dataset):
                 k_sum = float(np.sum(k_rot))
                 kernel_final = k_rot / k_sum if k_sum > 0 else kernel / k
                 crop = cv2.filter2D(crop, -1, kernel_final)
-            elif random.random() < 0.20:
-                k = random.choice([3, 5])
+            elif random.random() < 0.35:
+                k = random.choice([3, 5, 7])
                 crop = cv2.GaussianBlur(crop, (k, k), 0)
 
             # 2. Lighting, Headlight Lens Flare & Contrast Jitter
