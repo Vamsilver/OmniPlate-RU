@@ -122,7 +122,7 @@ def run_preflight_checks(skip_tests: bool = False):
             print(test_res.stdout)
             print(test_res.stderr)
             sys.exit(1)
-        print("    ✅ Pytest: 43/43 PASS (100%)")
+        print("    ✅ Pytest: 45/45 PASS (100%)")
     else:
         print("\n[3/3] Skipping tests (--skip-tests provided)")
 

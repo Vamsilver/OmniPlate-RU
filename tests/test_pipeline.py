@@ -298,6 +298,119 @@ class TestOmniPlatePipeline(unittest.TestCase):
             self.assertEqual(best_det.text, "AH889777")
             self.assertGreaterEqual(best_det.confidence, 0.70)
 
+    def test_safety_max_dimension_resize_downscale_and_rescale(self):
+        """
+        Verifies Safety Max-Dimension Resize:
+        - 4K frame (3840x2160) is downscaled to 1920x1080 for detector inference.
+        - Detections are correctly mapped back to original 4K coordinate space.
+        """
+        import torch
+
+        class MockBox:
+            def __init__(self, xyxy, conf, cls):
+                self.xyxy = torch.tensor([xyxy], dtype=torch.float32)
+                self.conf = torch.tensor([conf], dtype=torch.float32)
+                self.cls = torch.tensor([cls], dtype=torch.int64)
+
+            def __len__(self):
+                return len(self.xyxy)
+
+        class MockKpts:
+            def __init__(self, kpts):
+                self.xy = torch.tensor([kpts], dtype=torch.float32)
+
+            def __len__(self):
+                return len(self.xy)
+
+        class MockResult:
+            def __init__(self, xyxy, kpts):
+                self.boxes = MockBox(xyxy, 0.92, 0)
+                self.keypoints = MockKpts(kpts)
+
+        captured_inputs = []
+
+        class MockDetector:
+            def predict(self, source, **kwargs):
+                captured_inputs.append(source.shape)
+                # Plate located at center of resized (1080, 1920) image
+                # BBox: x1=880, y1=500, x2=1040, y2=540 (w=160, h=40)
+                xyxy = [880.0, 500.0, 1040.0, 540.0]
+                kpts = [
+                    [880.0, 500.0],
+                    [1040.0, 500.0],
+                    [1040.0, 540.0],
+                    [880.0, 540.0],
+                ]
+                return [MockResult(xyxy, kpts)]
+
+        self.pipeline.detector = MockDetector()
+
+        # 4K image: 2160 rows, 3840 cols
+        img_4k = np.full((2160, 3840, 3), 100, dtype=np.uint8)
+        dets = self.pipeline.detect(img_4k)
+
+        # 1. Detector must receive downscaled image (1080, 1920, 3)
+        self.assertEqual(len(captured_inputs), 1)
+        self.assertEqual(captured_inputs[0], (1080, 1920, 3))
+
+        # 2. Detections must be scaled back by factor of 2.0 to 4K coordinates
+        self.assertEqual(len(dets), 1)
+        det = dets[0]
+        bx, by, bw, bh = det.bbox
+        self.assertEqual(bx, 1760)   # 880 * 2.0
+        self.assertEqual(by, 1000)   # 500 * 2.0
+        self.assertEqual(bw, 320)    # 160 * 2.0
+        self.assertEqual(bh, 80)     # 40 * 2.0
+
+        # 3. Quad coordinates must also be scaled back by 2.0
+        expected_quad = [1760.0, 1000.0, 2080.0, 1000.0, 2080.0, 1080.0, 1760.0, 1080.0]
+        for q_act, q_exp in zip(det.quad, expected_quad):
+            self.assertAlmostEqual(q_act, q_exp, delta=1.0)
+
+    def test_safety_max_dimension_resize_noop_on_standard_res(self):
+        """
+        Verifies that standard resolution images (<= 1920 max dim) are passed
+        to the detector directly without resizing overhead.
+        """
+        import torch
+
+        captured_inputs = []
+
+        class MockBox:
+            def __init__(self):
+                self.xyxy = torch.tensor([[100.0, 100.0, 200.0, 130.0]])
+                self.conf = torch.tensor([0.90])
+                self.cls = torch.tensor([0])
+            def __len__(self): return len(self.xyxy)
+
+        class MockKpts:
+            def __init__(self):
+                self.xy = torch.tensor([[[100.0, 100.0], [200.0, 100.0], [200.0, 130.0], [100.0, 130.0]]])
+            def __len__(self): return len(self.xy)
+
+        class MockResult:
+            def __init__(self):
+                self.boxes = MockBox()
+                self.keypoints = MockKpts()
+
+        class MockDetector:
+            def predict(self, source, **kwargs):
+                captured_inputs.append(source.shape)
+                return [MockResult()]
+
+        self.pipeline.detector = MockDetector()
+
+        # 1080p image
+        img_1080 = np.full((1080, 1920, 3), 100, dtype=np.uint8)
+        _ = self.pipeline.detect(img_1080)
+        self.assertEqual(captured_inputs[0], (1080, 1920, 3))
+
+        # 720p image
+        img_720 = np.full((720, 1280, 3), 100, dtype=np.uint8)
+        _ = self.pipeline.detect(img_720)
+        self.assertEqual(captured_inputs[1], (720, 1280, 3))
+
 
 if __name__ == "__main__":
     unittest.main()
+
