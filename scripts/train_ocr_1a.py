@@ -362,6 +362,24 @@ def train(args):
     )
 
     model = LPRNet2D(num_classes=NUM_CLASSES, dropout_rate=0.15).to(device)
+
+    # Smart warm-start from best existing 1D model
+    init_ckpt = os.path.join(args.output_dir, "ocr_lprnet_best.pt")
+    if os.path.exists(init_ckpt):
+        try:
+            ckpt = torch.load(init_ckpt, map_location=device)
+            st = ckpt.get("state_dict", ckpt)
+            m_st = model.state_dict()
+            loaded = 0
+            for k, v in st.items():
+                if k in m_st and m_st[k].shape == v.shape:
+                    m_st[k] = v
+                    loaded += 1
+            model.load_state_dict(m_st)
+            print(f"[+] Smart Warm-Start: Loaded {loaded}/{len(m_st)} parameter tensors from {init_ckpt} successfully!")
+        except Exception as e:
+            print(f"[!] Warning: Could not warm-start from checkpoint: {e}")
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-5)
     ctc = nn.CTCLoss(blank=BLANK_IDX, zero_infinity=True)

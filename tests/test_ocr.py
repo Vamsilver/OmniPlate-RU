@@ -268,6 +268,17 @@ class TestPlateOCR(unittest.TestCase):
         self.assertFalse(is_valid_gost_plate("A123BC00", "type1", allow_wildcards=True))  # Invalid region 00
         self.assertFalse(is_valid_gost_plate("A123BC888", "type1", allow_wildcards=True))  # Invalid 3-digit region 888
 
+    def test_confusion_prior_integration(self):
+        from src.pipeline.decoder import get_confusion_prior
+        prior = get_confusion_prior()
+        self.assertIsInstance(prior, dict)
+        if prior:
+            # Verify empirical pairs exist (e.g. 5 -> 3, C -> O, etc.)
+            self.assertIn("5", prior)
+            self.assertIn("C", prior)
+            self.assertGreater(prior["5"].get("3", 0.0), 0.0)
+            self.assertGreater(prior["C"].get("O", 0.0), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

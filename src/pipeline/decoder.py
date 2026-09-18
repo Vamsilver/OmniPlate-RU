@@ -72,6 +72,29 @@ VALID_3DIGIT_REGIONS = {
 # Official Russian GIBDD 2-digit region codes (active & historical legal codes 01..99)
 VALID_2DIGIT_REGIONS = {f"{i:02d}" for i in range(1, 100)}
 
+_CONFUSION_PRIOR: Optional[Dict[str, Dict[str, float]]] = None
+
+
+def get_confusion_prior() -> Dict[str, Dict[str, float]]:
+    """
+    Lazy-loads empirical character confusion probability matrix (P(pred | true))
+    extracted from real road plate evaluations to inform data-driven beam search.
+    """
+    global _CONFUSION_PRIOR
+    if _CONFUSION_PRIOR is None:
+        json_path = os.path.join(os.path.dirname(__file__), "confusion_matrix.json")
+        if os.path.exists(json_path):
+            try:
+                import json
+                with open(json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    _CONFUSION_PRIOR = data.get("probabilities", {})
+            except Exception:
+                _CONFUSION_PRIOR = {}
+        else:
+            _CONFUSION_PRIOR = {}
+    return _CONFUSION_PRIOR
+
 
 def is_valid_region(reg: str, allow_wildcards: bool = False) -> bool:
     """
@@ -1251,6 +1274,27 @@ class CTCDecoder:
             "4": [("2", 0.18), ("7", 0.25), ("9", 0.20), ("1", 0.15)],
             "6": [("5", 0.15), ("8", 0.15), ("0", 0.15)],
         }
+
+        # Data-Driven Confusion Prior (Phase 1, Vector 4)
+        conf_prior = get_confusion_prior()
+        if conf_prior:
+            for true_c, preds in conf_prior.items():
+                if true_c in LETTERS:
+                    cur_alts = {alt: b for alt, b in optical_letter_map.get(true_c, [])}
+                    for pred_c, p_val in preds.items():
+                        if pred_c in LETTERS and pred_c != true_c and p_val >= 0.0008:
+                            emp_bonus = round(min(0.35, max(0.12, 0.10 + 25.0 * p_val)), 2)
+                            if pred_c not in cur_alts or emp_bonus > cur_alts[pred_c]:
+                                cur_alts[pred_c] = emp_bonus
+                    optical_letter_map[true_c] = list(cur_alts.items())
+                elif true_c in DIGITS:
+                    cur_alts = {alt: b for alt, b in optical_digit_map.get(true_c, [])}
+                    for pred_c, p_val in preds.items():
+                        if pred_c in DIGITS and pred_c != true_c and p_val >= 0.0008:
+                            emp_bonus = round(min(0.35, max(0.12, 0.10 + 25.0 * p_val)), 2)
+                            if pred_c not in cur_alts or emp_bonus > cur_alts[pred_c]:
+                                cur_alts[pred_c] = emp_bonus
+                    optical_digit_map[true_c] = list(cur_alts.items())
 
         for p_type, text in list(candidate_dict.keys()):
             # 1. Letter optical confusion
