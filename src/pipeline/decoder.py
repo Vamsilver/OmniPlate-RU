@@ -1031,6 +1031,63 @@ class CTCDecoder:
         return float(NEG_INF)
 
     @classmethod
+    def compute_ctc_log_prob_batch(
+        cls,
+        log_probs: np.ndarray,
+        target_strs: Sequence[str],
+        blank_idx: int = BLANK_IDX,
+    ) -> List[float]:
+        """
+        Computes exact CTC log-probabilities log P(target_str | log_probs) for a BATCH
+        of candidate target strings simultaneously in a single vectorized PyTorch forward pass.
+
+        Args:
+            log_probs: Log-probability array of shape (T, C).
+            target_strs: Sequence of target strings.
+            blank_idx: Index of the blank CTC token.
+
+        Returns:
+            List of scalar log-probabilities in range (-inf, 0.0].
+        """
+        if not target_strs:
+            return []
+
+        B = len(target_strs)
+        T, C = log_probs.shape
+
+        if torch is not None:
+            try:
+                target_indices_list = [
+                    [CHAR2IDX.get(c, CHAR2IDX[WILDCARD]) for c in s] if s else [blank_idx]
+                    for s in target_strs
+                ]
+                target_lens = torch.tensor([max(1, len(t)) for t in target_indices_list], dtype=torch.long)
+                flat_targets = torch.tensor([idx for t in target_indices_list for idx in t], dtype=torch.long)
+
+                t_log_probs = torch.from_numpy(log_probs).unsqueeze(1).repeat(1, B, 1).float()
+                input_lens = torch.full((B,), T, dtype=torch.long)
+
+                losses = F.ctc_loss(
+                    t_log_probs,
+                    flat_targets,
+                    input_lens,
+                    target_lens,
+                    blank=blank_idx,
+                    reduction="none",
+                    zero_infinity=True,
+                )
+                res = (-losses).tolist()
+                for i, s in enumerate(target_strs):
+                    if not s:
+                        res[i] = float(np.sum(log_probs[:, blank_idx]))
+                return res
+            except Exception:
+                pass
+
+        # Fallback to single compute_ctc_log_prob if PyTorch batching fails
+        return [cls.compute_ctc_log_prob(log_probs, s, blank_idx=blank_idx) for s in target_strs]
+
+    @classmethod
     def score_hypotheses(
         cls,
         logits: np.ndarray,
@@ -1227,8 +1284,11 @@ class CTCDecoder:
         best_cand_text = raw_text
         best_cand_type = norm_prior if norm_prior in ("type1", "type1a", "type1b", "type2") else "type1"
 
-        for (p_type, text), bonus in candidate_dict.items():
-            lp = cls.compute_ctc_log_prob(log_probs, text, blank_idx=blank_idx)
+        cand_items = list(candidate_dict.items())
+        cand_texts = [text for (p_type, text), bonus in cand_items]
+        lps = cls.compute_ctc_log_prob_batch(log_probs, cand_texts, blank_idx=blank_idx)
+
+        for ((p_type, text), bonus), lp in zip(cand_items, lps):
             norm_lp = lp / max(1, len(text))
             wildcards = text.count("#")
             score = norm_lp - (1.0 * wildcards) + bonus

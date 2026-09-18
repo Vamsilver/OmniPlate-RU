@@ -418,7 +418,7 @@ class PlateOCR:
         mean_l = float(np.mean(l_chan))
         std_l = float(np.std(l_chan))
         # Activate adaptive CLAHE on dark or low-contrast plates
-        is_dark_or_low_contrast = (mean_l < 75) or (mean_l < 100 and std_l < 22)
+        is_dark_or_low_contrast = (mean_l < 50 and std_l < 15)
 
         if use_tta and is_dark_or_low_contrast:
             crop_clahe = self.apply_adaptive_clahe(crop_bgr)
