@@ -337,6 +337,7 @@ class OmniPlatePipeline:
         Pass 1: Standard confidence threshold (e.g. 0.15).
         Pass 2: Sensitive fallback pass (conf=0.06) with strict geometry validation
                 if no plates were detected on pass 1.
+        Includes Safety Max-Dimension Resize guard to keep latency < 40ms on 4K frames.
         """
         if self.detector is None:
             return []
@@ -346,8 +347,24 @@ class OmniPlatePipeline:
             return []
 
         ih, iw = image.shape[:2]
+
+        # Safety Max-Dimension Resize (prevents latency SLA spikes on unconstrained 4K camera frames)
+        max_dim = max(ih, iw)
+        if max_dim > 1920:
+            scale = 1920.0 / max_dim
+            new_w = max(1, int(round(iw * scale)))
+            new_h = max(1, int(round(ih * scale)))
+            det_img = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            det_w, det_h = new_w, new_h
+            scale_x = iw / float(new_w)
+            scale_y = ih / float(new_h)
+        else:
+            det_img = image
+            det_w, det_h = iw, ih
+            scale_x, scale_y = 1.0, 1.0
+
         results = self.detector.predict(
-            source=image,
+            source=det_img,
             imgsz=self.imgsz,
             conf=self.conf_threshold,
             iou=self.iou_threshold,
@@ -356,14 +373,12 @@ class OmniPlatePipeline:
             verbose=False,
         )
 
-        detections = self._parse_results(results[0] if results else None, iw, ih)
-        if detections:
-            return detections
+        detections = self._parse_results(results[0] if results else None, det_w, det_h)
 
         # Two-pass adaptive fallback for dark, distant, or high-angle real plates
-        if self.conf_threshold > 0.09:
+        if not detections and self.conf_threshold > 0.09:
             results_soft = self.detector.predict(
-                source=image,
+                source=det_img,
                 imgsz=self.imgsz,
                 conf=0.07,
                 iou=self.iou_threshold,
@@ -371,11 +386,27 @@ class OmniPlatePipeline:
                 device=self.device,
                 verbose=False,
             )
-            detections = self._parse_results(results_soft[0] if results_soft else None, iw, ih)
+            detections = self._parse_results(results_soft[0] if results_soft else None, det_w, det_h)
             if detections:
                 for d in detections:
                     d.is_soft_fallback = True
-                return detections
+
+        # Rescale detections back to original coordinate space if resized
+        if scale_x != 1.0 or scale_y != 1.0:
+            for d in detections:
+                bx, by, bw, bh = d.bbox
+                nbx = max(0, min(iw - 1, int(round(bx * scale_x))))
+                nby = max(0, min(ih - 1, int(round(by * scale_y))))
+                nbw = max(1, min(iw - nbx, int(round(bw * scale_x))))
+                nbh = max(1, min(ih - nby, int(round(bh * scale_y))))
+                d.bbox = (nbx, nby, nbw, nbh)
+
+                nq = []
+                for i in range(0, len(d.quad), 2):
+                    qx = max(0.0, min(float(iw - 1), d.quad[i] * scale_x))
+                    qy = max(0.0, min(float(ih - 1), d.quad[i + 1] * scale_y))
+                    nq.extend([qx, qy])
+                d.quad = nq
 
         return detections
 
