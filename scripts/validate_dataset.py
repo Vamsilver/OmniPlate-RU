@@ -23,7 +23,8 @@ ALLOWED_LETTERS = set("ABEKMHOPCTYX#")
 ALLOWED_TYPES = {"type1", "type1a", "type1b", "other"}
 ALLOWED_CONDITIONS = {"day", "night", "rain", "snow", "dirt", "glare", "motion_blur", "angle"}
 
-PLATE_REGEX = re.compile(r"^[ABEKMHOPCTYX#][\d#]{3}[ABEKMHOPCTYX#]{2}[\d#]{2,3}$")
+PLATE_REGEX_TYPE1 = re.compile(r"^[ABEKMHOPCTYX#][\d#]{3}[ABEKMHOPCTYX#]{2}[\d#]{2,3}$")
+PLATE_REGEX_TYPE1B = re.compile(r"^[ABEKMHOPCTYX#]{2}[\d#]{3}[\d#]{2,3}$")
 VALID_3DIGIT_STARTS = {"1", "2", "7", "#"}
 
 
@@ -127,10 +128,18 @@ def validate_dataset(dataset_dir: str) -> bool:
 
             # Check plate_num regex
             if p_type != "other":
-                if not PLATE_REGEX.match(plate_num):
-                    errors.append(f"Row {row_idx}: Plate number '{plate_num}' violates GOST mask for {p_type}")
-                if len(plate_num) == 9 and plate_num[6] not in VALID_3DIGIT_STARTS:
-                    warnings.append(f"Row {row_idx}: 3-digit region code in '{plate_num}' starts with unexpected digit '{plate_num[6]}'")
+                if p_type == "type1b":
+                    if not (PLATE_REGEX_TYPE1B.match(plate_num) or PLATE_REGEX_TYPE1.match(plate_num)):
+                        errors.append(f"Row {row_idx}: Plate number '{plate_num}' violates GOST mask for {p_type}")
+                    if PLATE_REGEX_TYPE1B.match(plate_num) and len(plate_num) == 8 and plate_num[5] not in VALID_3DIGIT_STARTS:
+                        warnings.append(f"Row {row_idx}: 3-digit region code in '{plate_num}' starts with unexpected digit '{plate_num[5]}'")
+                    elif PLATE_REGEX_TYPE1.match(plate_num) and len(plate_num) == 9 and plate_num[6] not in VALID_3DIGIT_STARTS:
+                        warnings.append(f"Row {row_idx}: 3-digit region code in '{plate_num}' starts with unexpected digit '{plate_num[6]}'")
+                else:
+                    if not PLATE_REGEX_TYPE1.match(plate_num):
+                        errors.append(f"Row {row_idx}: Plate number '{plate_num}' violates GOST mask for {p_type}")
+                    if len(plate_num) == 9 and plate_num[6] not in VALID_3DIGIT_STARTS:
+                        warnings.append(f"Row {row_idx}: 3-digit region code in '{plate_num}' starts with unexpected digit '{plate_num[6]}'")
 
             # Check bbox: x,y,w,h
             try:

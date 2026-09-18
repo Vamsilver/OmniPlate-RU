@@ -66,8 +66,9 @@ class PlateCropDataset(Dataset):
         self.is_train = is_train
         self.cache_in_ram = cache_in_ram
 
-        # Load samples from meta.csv
-        all_samples = []
+        # 1. Load samples from meta.csv (synthetic and all real road scenes)
+        synth_samples = []
+        real_meta_samples = []
         with open(meta_csv, "r", encoding="utf-8", errors="replace") as f:
             reader = csv.reader(f, delimiter=";")
             header = next(reader)
@@ -77,28 +78,96 @@ class PlateCropDataset(Dataset):
                 img_rel, plate_num, p_type, bbox_str, quad_str, is_veh, is_syn, src, lic, cond = row[:10]
                 if p_type not in ("type1", "type1a", "type1b"):
                     continue
-                # Data Integrity: ONLY train OCR on samples with verified ground-truth text!
-                # All synthetic samples (is_syn == '1') have 100% accurate rendered text.
-                # Real reference samples (ref_real_*) have verified labels.
-                # All other real images have auto-generated pseudo-labels for detector bboxes and MUST NOT be used for OCR!
-                is_verified = (is_syn == "1") or img_rel.startswith("images/real/ref_real_")
-                if not is_verified:
-                    continue
-
-                all_samples.append({
+                item_dict = {
                     "img_rel": img_rel,
                     "plate_num": plate_num,
                     "plate_type": p_type,
                     "quad": quad_str,
                     "bbox": bbox_str,
-                })
+                    "is_pre_cropped": False,
+                }
+                if is_syn == "1":
+                    synth_samples.append(item_dict)
+                else:
+                    real_meta_samples.append(item_dict)
+        print(f"[+] Loaded from meta.csv: {len(synth_samples)} synthetic and {len(real_meta_samples)} real plate scenes")
+
+        # 2. Ingest verified real crops and targeted hard synth crops from dataset/verified_crops/manifest.csv
+        manifest_path = os.path.join(self.root_dir, "verified_crops", "manifest.csv")
+        real_curated = []
+        synth_hard = []
+        if os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as mf:
+                m_reader = csv.reader(mf, delimiter=";")
+                next(m_reader, None)
+                for m_row in m_reader:
+                    if len(m_row) >= 3:
+                        c_file, p_num, p_type = m_row[0], m_row[1], m_row[2]
+                        src_val = m_row[4] if len(m_row) >= 5 else ""
+                        c_full_p = os.path.join(self.root_dir, "verified_crops", c_file)
+                        if os.path.exists(c_full_p):
+                            sample_item = {
+                                "img_rel": os.path.join("verified_crops", c_file),
+                                "plate_num": p_num,
+                                "plate_type": p_type,
+                                "quad": "",
+                                "bbox": "",
+                                "is_pre_cropped": True,
+                            }
+                            if "synth" in src_val.lower():
+                                synth_hard.append(sample_item)
+                            else:
+                                real_curated.append(sample_item)
+            print(f"[+] Loaded {len(real_curated)} real plate crops and {len(synth_hard)} hard synth crops from {manifest_path}")
 
         # Deterministic split
         random.seed(seed)
-        random.shuffle(all_samples)
-        split_idx = int(len(all_samples) * (1.0 - val_split))
-        self.samples = all_samples[:split_idx] if is_train else all_samples[split_idx:]
-        print(f"[{'TRAIN' if is_train else 'VAL'}] Loaded {len(self.samples)} samples from {meta_csv}")
+        random.shuffle(synth_samples)
+        synth_val_idx = max(1, int(len(synth_samples) * val_split))
+        synth_train = synth_samples[synth_val_idx:]
+        synth_val = synth_samples[:synth_val_idx]
+
+        random.shuffle(real_meta_samples)
+        real_meta_val_idx = max(1, int(len(real_meta_samples) * val_split))
+        real_meta_train = real_meta_samples[real_meta_val_idx:]
+        real_meta_val = real_meta_samples[:real_meta_val_idx]
+
+        random.shuffle(synth_hard)
+        hard_val_idx = max(1, int(len(synth_hard) * val_split))
+        hard_train = synth_hard[hard_val_idx:]
+        hard_val = synth_hard[:hard_val_idx]
+
+        random.shuffle(real_curated)
+        real_val_idx = max(1, int(len(real_curated) * val_split))
+        real_train = real_curated[real_val_idx:]
+        real_val = real_curated[:real_val_idx]
+
+        if is_train:
+            # Oversample real road samples so model deeply learns real camera artifacts, fonts, and angles
+            oversampled_real = []
+            for _ in range(4):
+                oversampled_real.extend(real_train)
+                oversampled_real.extend(real_meta_train)
+            # Targeted 1A boost to balance square plates with Type 1
+            extra_1a = [s for s in (real_train + real_meta_train + hard_train) if s["plate_type"] == "type1a"]
+            for _ in range(4):
+                oversampled_real.extend(extra_1a)
+            # Targeted Type 1 boost on clean real road plates to reinforce real camera fonts
+            extra_t1_real = [s for s in (real_train + real_meta_train) if s["plate_type"] == "type1" and "#" not in s["plate_num"]]
+            for _ in range(3):
+                oversampled_real.extend(extra_t1_real)
+            self.samples = synth_train + hard_train + oversampled_real
+            random.shuffle(self.samples)
+            print(
+                f"[TRAIN] Total: {len(self.samples)} ({len(synth_train)} synth + {len(hard_train)} hard synth + "
+                f"{len(oversampled_real)} oversampled real/1A [{len(real_train) + len(real_meta_train)} unique real])"
+            )
+        else:
+            self.samples = synth_val + hard_val + real_val + real_meta_val
+            print(
+                f"[VAL] Total: {len(self.samples)} ({len(synth_val)} synth + "
+                f"{len(hard_val)} hard synth + {len(real_val) + len(real_meta_val)} real [{len(real_val)} curated + {len(real_meta_val)} meta])"
+            )
 
         # Pre-cache crops in RAM to eliminate disk I/O bottlenecks during training
         self.cached_crops: List[np.ndarray] = []
@@ -118,12 +187,25 @@ class PlateCropDataset(Dataset):
         img = cv2.imread(img_path)
         if img is None:
             return np.zeros((36, 160, 3), dtype=np.uint8)
+
+        if item.get("is_pre_cropped", False):
+            if img.shape[:2] != (36, 160):
+                return cv2.resize(img, (160, 36), interpolation=cv2.INTER_LINEAR)
+            return img
+
         p_type = item["plate_type"]
-        quad = item["quad"]
+        quad = item.get("quad", "")
+        bbox = item.get("bbox", "")
         try:
-            rect = self.rectifier.rectify(img, quad, plate_type=p_type)
+            if quad and len([v for v in quad.split(",") if v.strip()]) == 8:
+                rect = self.rectifier.rectify(img, quad, plate_type=p_type)
+            elif bbox and len([v for v in bbox.split(",") if v.strip()]) == 4:
+                rect = self.rectifier.rectify_bbox(img, bbox, plate_type=p_type)
+            else:
+                rect = cv2.resize(img, (160, 36), interpolation=cv2.INTER_LINEAR)
+
             if p_type == "type1a":
-                top, bottom = self.rectifier.split_type1a(rect)
+                top, bottom = self.rectifier.split_type1a(rect, adaptive_seam=True, vertical_margin=0)
                 crop = self.rectifier.stitch_type1a_horizontal(top, bottom, target_size=(160, 36))
             else:
                 crop = cv2.resize(rect, (160, 36), interpolation=cv2.INTER_LINEAR)
@@ -145,17 +227,34 @@ class PlateCropDataset(Dataset):
         if self.is_train:
             h, w = crop.shape[:2]
 
-            # 1. Motion blur or Gaussian blur (camera shake, vehicle movement)
-            if random.random() < 0.25:
-                k = random.choice([3, 5, 7])
+            # 1. Angled Motion blur or Gaussian blur (camera shake, high-speed vehicle movement)
+            if random.random() < 0.30:
+                k = random.choice([3, 5, 7, 9])
+                angle = random.uniform(-25.0, 25.0)
                 kernel = np.zeros((k, k), dtype=np.float32)
-                kernel[k // 2, :] = 1.0 / k
-                crop = cv2.filter2D(crop, -1, kernel)
+                kernel[k // 2, :] = 1.0
+                M_rot = cv2.getRotationMatrix2D((k / 2.0 - 0.5, k / 2.0 - 0.5), angle, 1.0)
+                k_rot = cv2.warpAffine(kernel, M_rot, (k, k))
+                k_sum = float(np.sum(k_rot))
+                kernel_final = k_rot / k_sum if k_sum > 0 else kernel / k
+                crop = cv2.filter2D(crop, -1, kernel_final)
             elif random.random() < 0.20:
                 k = random.choice([3, 5])
                 crop = cv2.GaussianBlur(crop, (k, k), 0)
 
-            # 2. Lighting & Contrast jitter
+            # 2. Lighting, Headlight Lens Flare & Contrast Jitter
+            if random.random() < 0.25:
+                # Direct sunlight / headlight glare flare
+                cx = random.randint(0, w)
+                cy = random.randint(0, h)
+                rx = random.randint(15, 45)
+                ry = random.randint(8, 20)
+                flare_layer = np.zeros((h, w), dtype=np.uint8)
+                cv2.ellipse(flare_layer, (cx, cy), (rx, ry), random.randint(-30, 30), 0, 360, 255, -1)
+                flare_blur = cv2.GaussianBlur(flare_layer, (15, 15), 0)
+                flare_intensity = random.uniform(0.18, 0.45)
+                crop = np.clip(crop.astype(np.float32) + (flare_blur[:, :, None] * flare_intensity), 0, 255).astype(np.uint8)
+
             if random.random() < 0.35:
                 alpha = random.uniform(0.70, 1.35)
                 beta = random.uniform(-25, 25)
@@ -173,7 +272,14 @@ class PlateCropDataset(Dataset):
                 noise = np.random.normal(0, random.uniform(4, 16), crop.shape).astype(np.float32)
                 crop = np.clip(crop.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
-            # 5. Bolt holes & road dirt blotches (dark circles/ellipses)
+            # 5. Road grime scratches & bolt holes
+            if random.random() < 0.30:
+                for _ in range(random.randint(1, 2)):
+                    pt1 = (random.randint(0, w), random.randint(0, h))
+                    pt2 = (max(0, min(w - 1, pt1[0] + random.randint(-25, 25))), max(0, min(h - 1, pt1[1] + random.randint(-6, 6))))
+                    color = (random.randint(20, 65), random.randint(20, 65), random.randint(20, 65))
+                    cv2.line(crop, pt1, pt2, color, thickness=1)
+
             if random.random() < 0.30:
                 num_spots = random.randint(1, 3)
                 for _ in range(num_spots):
@@ -192,6 +298,21 @@ class PlateCropDataset(Dataset):
                 pts2 = np.float32([[dx, dy], [w - dx, -dy], [w + dx, h + dy], [-dx, h - dy]])
                 M = cv2.getPerspectiveTransform(pts1, pts2)
                 crop = cv2.warpPerspective(crop, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
+
+            # 7. Low-Resolution & Distance Downscaling (simulating distant traffic cameras)
+            if random.random() < 0.40:
+                scale_h = random.randint(12, 24)
+                scale_w = max(40, int(w * (scale_h / float(h))))
+                interp = random.choice([cv2.INTER_AREA, cv2.INTER_NEAREST, cv2.INTER_LINEAR])
+                small = cv2.resize(crop, (scale_w, scale_h), interpolation=interp)
+                crop = cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
+
+            # 8. JPEG Compression Artifacts (road CCTV / dashcam codecs)
+            if random.random() < 0.35:
+                quality = random.randint(20, 65)
+                success, enc = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                if success:
+                    crop = cv2.imdecode(enc, cv2.IMREAD_COLOR)
 
         # Preprocess: RGB and normalize to [0, 1]
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
@@ -273,8 +394,9 @@ def train_ocr(args):
         try:
             ckpt = torch.load(best_ckpt_path, map_location=device)
             model.load_state_dict(ckpt["state_dict"])
-            best_acc = float(ckpt.get("best_acc", 0.0))
-            print(f"[*] Resumed weights from {best_ckpt_path} (previous best acc: {best_acc:.2f}%)")
+            prev_acc = float(ckpt.get("best_acc", 0.0))
+            best_acc = 0.0
+            print(f"[*] Loaded pre-trained weights from {best_ckpt_path} (previous best acc: {prev_acc:.2f}%) for fine-tuning!")
         except Exception as e:
             print(f"[!] Warning: Could not resume from checkpoint: {e}")
 
@@ -309,8 +431,8 @@ def train_ocr(args):
         val_total = 0
         val_char_correct = 0
         val_char_total = 0
-        by_type_correct = {"type1": 0, "type1a": 0, "type1b": 0}
-        by_type_total = {"type1": 0, "type1a": 0, "type1b": 0}
+        by_type_correct = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0}
+        by_type_total = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0}
 
         sample_preds = []
         with torch.no_grad():
@@ -344,12 +466,13 @@ def train_ocr(args):
         acc_t1 = (by_type_correct["type1"] / max(1, by_type_total["type1"])) * 100.0
         acc_1a = (by_type_correct["type1a"] / max(1, by_type_total["type1a"])) * 100.0
         acc_1b = (by_type_correct["type1b"] / max(1, by_type_total["type1b"])) * 100.0
+        acc_t2 = (by_type_correct["type2"] / max(1, by_type_total["type2"])) * 100.0
         elapsed = time.time() - start_t
 
         print(
             f"Epoch [{epoch:02d}/{args.epochs:02d}] "
             f"Loss: {train_loss:.4f} | "
-            f"Val: {seq_acc:.1f}% (T1:{acc_t1:.0f}% 1A:{acc_1a:.0f}% 1B:{acc_1b:.0f}%) | "
+            f"Val: {seq_acc:.1f}% (T1:{acc_t1:.0f}% 1A:{acc_1a:.0f}% 1B:{acc_1b:.0f}% T2:{acc_t2:.0f}%) | "
             f"Char: {char_acc:.1f}% | "
             f"Time: {elapsed:.1f}s"
         )
@@ -406,8 +529,20 @@ def train_ocr(args):
             dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
         )
         print(f"[SUCCESS] ONNX Export Successful: {onnx_path}")
+        # Mirror to ocr_lprnet.onnx for compatibility
+        compat_onnx = os.path.join(args.output_dir, "ocr_lprnet.onnx")
+        import shutil
+        shutil.copyfile(onnx_path, compat_onnx)
+        print(f"[SUCCESS] Mirrored ONNX to {compat_onnx}")
     except Exception as e:
         print(f"[ERROR] ONNX Export error: {e}")
+
+    # Mirror to ocr_lprnet.onnx for backwards compatibility
+    compat_onnx = os.path.join(args.output_dir, "ocr_lprnet.onnx")
+    if os.path.exists(onnx_path):
+        import shutil
+        shutil.copyfile(onnx_path, compat_onnx)
+        print(f"[SUCCESS] Mirrored ONNX to {compat_onnx}")
 
     # Validate ONNX runtime load
     try:

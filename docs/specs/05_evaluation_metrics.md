@@ -27,6 +27,7 @@ FATAL_PENALTY: "Predicting type1/type1a/type1b on an 'other' plate"
 ### 1. Sequence Accuracy (Точное совпадение номера)
 $$Acc_{seq} = \frac{1}{N} \sum_{i=1}^{N} \mathbb{I}(\text{pred}_i == \text{target}_i)$$
 - Позиции с `#` в таргете: считаются совпавшими, если предсказан либо точный символ, либо `#`.
+- **Запрет угадывания**: попытка наугад вписать нечитаемый символ вместо `#` в эталон или предсказание при ошибке обнуляет точность всей последовательности ($Acc_{seq}=0$) и ухудшает CER. См. детальный регламент в `docs/specs/02_plate_mask_regex.md` (п. 4).
 
 ### 2. Character Error Rate (CER) с учётом нечитаемых символов
 $$CER = \frac{\sum_{i=1}^N \text{Levenshtein}(\text{pred}_i, \text{target}_i)}{\sum_{i=1}^N \text{len}(\text{target}_i)}$$

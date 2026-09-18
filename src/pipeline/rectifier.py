@@ -97,6 +97,53 @@ class PlateRectifier:
 
         return rect
 
+    @staticmethod
+    def refine_corners_subpixel(
+        image: np.ndarray,
+        pts: np.ndarray,
+        window_size: Tuple[int, int] = (5, 5),
+        max_drift_px: float = 3.5,
+    ) -> np.ndarray:
+        """
+        Applies subpixel corner refinement (cv2.cornerSubPix) to quadrilateral keypoints
+        using local image gradients.
+        Safely bounds drift to max_drift_px to prevent divergence on noisy borders.
+        """
+        if image is None or image.size == 0 or pts is None or len(pts) != 4:
+            return pts
+
+        try:
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image
+
+            h, w = gray.shape[:2]
+            corners = pts.astype(np.float32).reshape(4, 1, 2).copy()
+
+            # Ensure coordinates are safely within image boundaries
+            for i in range(4):
+                corners[i, 0, 0] = np.clip(corners[i, 0, 0], 2.0, w - 3.0)
+                corners[i, 0, 1] = np.clip(corners[i, 0, 1], 2.0, h - 3.0)
+
+            crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 25, 0.01)
+            refined = cv2.cornerSubPix(gray, corners, window_size, (-1, -1), crit)
+            refined_pts = refined.reshape(4, 2)
+
+            # Verification: enforce max_drift_px and convexity
+            res = pts.copy()
+            for i in range(4):
+                drift = np.linalg.norm(refined_pts[i] - pts[i])
+                if drift <= max_drift_px:
+                    res[i] = refined_pts[i]
+
+            # Verify polygon remains convex and non-degenerate
+            if cv2.isContourConvex(res.astype(np.int32)):
+                return res
+            return pts
+        except Exception:
+            return pts
+
     def get_canonical_size(self, plate_type: str = "type1") -> Tuple[int, int]:
         """Returns (width, height) for the given plate_type."""
         norm_type = plate_type.lower().strip()
@@ -109,6 +156,8 @@ class PlateRectifier:
         plate_type: str = "type1",
         target_size: Optional[Tuple[int, int]] = None,
         auto_order: bool = True,
+        margin: Union[float, Tuple[float, float]] = 0.0,
+        refine_corners: bool = False,
     ) -> np.ndarray:
         """
         Warps the quadrilateral region defined by `quad` into a canonical rectangular crop.
@@ -119,6 +168,9 @@ class PlateRectifier:
             plate_type: One of 'type1', 'type1a', 'type1b', 'other'.
             target_size: Optional (width, height) override. Defaults to CANONICAL_SIZES.
             auto_order: If True, re-orders vertices to [TL, TR, BR, BL].
+            margin: Safety margin padding ratio (e.g. 0.035 for 3.5% padding, or (0.035, 0.025)).
+                   Expands the captured region outward to prevent clipping boundary strokes of symbols.
+            refine_corners: If True, applies subpixel corner refinement via local gradients.
 
         Returns:
             Warped numpy array of shape (target_h, target_w, C).
@@ -131,17 +183,29 @@ class PlateRectifier:
         if auto_order:
             src_pts = self.order_quad_points(src_pts)
 
+        if refine_corners:
+            src_pts = self.refine_corners_subpixel(image, src_pts)
+
         if target_size is None:
             target_w, target_h = self.get_canonical_size(plate_type)
         else:
             target_w, target_h = target_size
 
+        if isinstance(margin, (tuple, list)):
+            margin_x, margin_y = float(margin[0]), float(margin[1])
+        else:
+            margin_x = margin_y = float(margin)
+
+        # Inset destination coordinates by safety margin so warp captures surrounding image context
+        pad_w = float(target_w) * max(0.0, min(0.15, margin_x))
+        pad_h = float(target_h) * max(0.0, min(0.15, margin_y))
+
         dst_pts = np.array(
             [
-                [0.0, 0.0],
-                [float(target_w - 1), 0.0],
-                [float(target_w - 1), float(target_h - 1)],
-                [0.0, float(target_h - 1)],
+                [pad_w, pad_h],
+                [float(target_w - 1) - pad_w, pad_h],
+                [float(target_w - 1) - pad_w, float(target_h - 1) - pad_h],
+                [pad_w, float(target_h - 1) - pad_h],
             ],
             dtype=np.float32,
         )
@@ -193,7 +257,72 @@ class PlateRectifier:
         return cv2.resize(crop, (tw, th), interpolation=self.interpolation)
 
     @classmethod
-    def split_type1a(cls, rectified_1a: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def find_adaptive_split_seam(
+        cls,
+        rectified_1a: np.ndarray,
+        search_range: Tuple[float, float] = (0.44, 0.54),
+    ) -> int:
+        """
+        Dynamically finds the optimal horizontal split line between line 1 and line 2
+        for Type 1A square plates by evaluating row brightness, intra-row variance, and edge energy.
+        Prevents vertical cutting through character strokes.
+
+        Args:
+            rectified_1a: Warped crop of shape (H, W, C) or (H, W).
+            search_range: (min_ratio, max_ratio) of total height H to search for the seam.
+
+        Returns:
+            Optimal split row index y (int).
+        """
+        h = rectified_1a.shape[0]
+        if h < 30:
+            return h // 2
+
+        if rectified_1a.ndim == 3:
+            gray = cv2.cvtColor(rectified_1a, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = rectified_1a
+
+        row_stds = np.array([float(np.std(gray[y, :])) for y in range(h)], dtype=np.float32)
+        # Flat image guard: If image lacks intra-row text variance, use geometric midpoint
+        if float(np.mean(row_stds)) < 8.0:
+            return h // 2
+
+        y_min = max(1, int(h * search_range[0]))
+        y_max = min(h - 2, int(h * search_range[1]))
+        if y_min >= y_max:
+            return h // 2
+
+        # Vertical Sobel gradient to detect character strokes crossing the row
+        sobel_y = np.abs(cv2.Sobel(gray.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3))
+
+        best_y = h // 2
+        min_energy = 1e9
+
+        # Seam between lines has:
+        # 1. Low darkness (bright background reflective plate)
+        # 2. Low edge intensity (no character strokes crossing)
+        # 3. Low intra-row standard deviation (pure background row)
+        # 4. Strict center anchoring to prevent slicing character rows
+        for y in range(y_min, y_max + 1):
+            darkness = 255.0 - float(np.mean(gray[y, :]))
+            edge = float(np.mean(sobel_y[y, :]))
+            std = float(row_stds[y])
+            center_dist = abs(y - (h / 2.0)) / float(h)
+            energy = darkness + (2.0 * edge) + (1.5 * std) + (60.0 * center_dist) + (150.0 * (center_dist ** 2))
+            if energy < min_energy:
+                min_energy = energy
+                best_y = y
+
+        return best_y
+
+    @classmethod
+    def split_type1a(
+        cls,
+        rectified_1a: np.ndarray,
+        adaptive_seam: bool = True,
+        vertical_margin: int = 0,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Splits a canonical 160x96 Type 1A crop into its two distinct text lines:
         - Top line (H=48): Series Letter + 3 Digits (e.g., 'A123')
@@ -201,14 +330,37 @@ class PlateRectifier:
 
         Args:
             rectified_1a: Warped image of shape (96, 160, C).
+            adaptive_seam: If True, uses dynamic seam finding to avoid cutting letter strokes.
+            vertical_margin: Protective vertical margin padding (in px, e.g. 0 to 2) to preserve
+                            character descenders (У, Д, Ц, Р) and ascenders/serifs.
 
         Returns:
-            (top_line, bottom_line) tuple, each of shape (48, 160, C).
+            (top_line, bottom_line) tuple, each normalized to canonical (48, 160, C).
         """
-        h = rectified_1a.shape[0]
-        mid = h // 2
-        top_line = rectified_1a[:mid, :]
-        bottom_line = rectified_1a[mid:, :]
+        h, w = rectified_1a.shape[:2]
+
+        if adaptive_seam and h >= 30:
+            mid = cls.find_adaptive_split_seam(rectified_1a)
+        else:
+            mid = h // 2
+
+        pad_y = max(0, int(vertical_margin))
+        raw_top = rectified_1a[:min(h, mid + pad_y), :]
+        raw_bottom = rectified_1a[max(0, mid - pad_y):, :]
+
+        target_h = cls.TYPE1A_LINE_HEIGHT  # 48 px
+
+        # Normalize line heights to canonical 48 px
+        if raw_top.shape[0] != target_h:
+            top_line = cv2.resize(raw_top, (w, target_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            top_line = raw_top
+
+        if raw_bottom.shape[0] != target_h:
+            bottom_line = cv2.resize(raw_bottom, (w, target_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            bottom_line = raw_bottom
+
         return top_line, bottom_line
 
     @classmethod
@@ -224,13 +376,22 @@ class PlateRectifier:
         Optionally resizes to `target_size` (e.g., canonical 160x36 for shared 1-line OCR).
 
         Args:
-            top_line: Image of shape (48, 160, C).
-            bottom_line: Image of shape (48, 160, C).
+            top_line: Image of shape (H1, W1, C).
+            bottom_line: Image of shape (H2, W2, C).
             target_size: Optional (width, height) to resize after stitching.
 
         Returns:
             Stitched image.
         """
+        h1, w1 = top_line.shape[:2]
+        h2, w2 = bottom_line.shape[:2]
+
+        # Ensure matching heights before horizontal concatenation
+        if h1 != h2:
+            target_h = max(h1, h2, cls.TYPE1A_LINE_HEIGHT)
+            top_line = cv2.resize(top_line, (w1, target_h), interpolation=cv2.INTER_LINEAR)
+            bottom_line = cv2.resize(bottom_line, (w2, target_h), interpolation=cv2.INTER_LINEAR)
+
         stitched = np.hstack([top_line, bottom_line])
         if target_size is not None:
             stitched = cv2.resize(stitched, target_size, interpolation=cv2.INTER_LINEAR)

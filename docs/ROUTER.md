@@ -18,6 +18,8 @@ ALLOWED_LETTERS: "ABEKMHOPCTYX" # 12 Latin letters matching Cyrillic
 REGEX_PLATE: "^[ABEKMHOPCTYX]\\d{3}[ABEKMHOPCTYX]{2}\\d{2,3}$"
 CSV_DELIMITER: ";"
 CSV_HEADER: "image;plate_num;plate_type;confidence"
+USER_DIRECTIVE_STAGE3: "ACTIVE ITERATION MODE. STRICTLY FORBIDDEN to mark Stage 3 complete without user's explicit manual confirmation!"
+ITERATION_STRATEGY: "Option 3: Hybrid (Real User Audit Ingestion + Targeted Hard Synthetic + Fine-Tuning + User Control Verification)"
 ```
 
 ---

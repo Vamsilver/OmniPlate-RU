@@ -1,4 +1,4 @@
-﻿"""
+"""
 Refined Plate Renderer with photorealistic base templates and exact character coordinates.
 Calibrated strictly to GOST R 50577-2018 dimensions and real physical references.
 Supports:
@@ -118,12 +118,22 @@ class PlateRenderer:
 
         return im, full_str
 
+    @staticmethod
+    def generate_random_bus_plate_text() -> Tuple[str, str, str, str]:
+        l2 = "".join(random.choices(ALLOWED_LETTERS, k=2))
+        d3 = "".join(random.choices(DIGITS, k=3))
+        region = random.choice(POPULAR_REGIONS)
+        full_str = f"{l2}{d3}{region}"
+        return full_str, l2, d3, region
+
     def render_type1b(self, plate_num: str = None) -> Tuple[Image.Image, str]:
         if plate_num is None:
-            full_str, l1, d3, l2, reg = self.generate_random_plate_text()
+            full_str, l2, d3, reg = self.generate_random_bus_plate_text()
         else:
             full_str = plate_num
-            l1, d3, l2, reg = plate_num[0], plate_num[1:4], plate_num[4:6], plate_num[6:]
+            l2 = plate_num[:2]
+            d3 = plate_num[2:5]
+            reg = plate_num[5:]
 
         w, h = 1040, 224
         # Pantone 116C: RGB (255, 204, 0)
@@ -138,13 +148,12 @@ class PlateRenderer:
         for bx, by in [(45, 112), (1000, 112)]:
             d.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(50, 40, 0), outline=(180, 140, 0), width=2)
 
-        # Characters
-        draw_char_exact(d, l1, 75, 68, self.font_main)
-        draw_char_exact(d, d3[0], 190, 34, self.font_main)
-        draw_char_exact(d, d3[1], 295, 34, self.font_main)
-        draw_char_exact(d, d3[2], 400, 34, self.font_main)
-        draw_char_exact(d, l2[0], 525, 68, self.font_main)
-        draw_char_exact(d, l2[1], 635, 68, self.font_main)
+        # Characters: GOST Type 1B is strictly 2 letters then 3 digits (LL DDD RR)
+        draw_char_exact(d, l2[0], 90, 68, self.font_main)
+        draw_char_exact(d, l2[1], 200, 68, self.font_main)
+        draw_char_exact(d, d3[0], 345, 34, self.font_main)
+        draw_char_exact(d, d3[1], 465, 34, self.font_main)
+        draw_char_exact(d, d3[2], 585, 34, self.font_main)
 
         # Region
         if len(reg) == 2:
@@ -231,6 +240,64 @@ class PlateRenderer:
 
         return im, full_str
 
+    def render_type2(self, plate_num: str = None) -> Tuple[Image.Image, str]:
+        """
+        Renders Type 2 Russian trailer plate (GOST R 50577-2018):
+        Format: LL DDDD RR (or RRR) - 2 letters, 4 digits, region code.
+        """
+        if plate_num is None:
+            l2 = "".join(random.choices(ALLOWED_LETTERS, k=2))
+            d4 = "".join(random.choices(DIGITS, k=4))
+            reg = random.choice(POPULAR_REGIONS)
+            full_str = f"{l2}{d4}{reg}"
+        else:
+            full_str = plate_num
+            l2, d4, reg = plate_num[:2], plate_num[2:6], plate_num[6:]
+
+        w, h = 1040, 224
+        im = Image.new("RGB", (w, h), (248, 248, 248))
+        d = ImageDraw.Draw(im)
+
+        # Borders
+        d.rounded_rectangle([6, 6, w - 7, h - 7], radius=24, outline=(15, 15, 15), width=8)
+        d.rounded_rectangle([18, 18, w - 19, h - 19], radius=16, outline=(230, 230, 230), width=3)
+        # Separator line
+        d.line([(770, 14), (770, h - 14)], fill=(15, 15, 15), width=6)
+
+        # Bolt holes
+        for bx, by in [(45, 112), (1000, 112)]:
+            d.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(40, 40, 40), outline=(180, 180, 180), width=2)
+
+        # Characters: 2 letters, 4 digits
+        draw_char_exact(d, l2[0], 75, 68, self.font_main)
+        draw_char_exact(d, l2[1], 180, 68, self.font_main)
+        draw_char_exact(d, d4[0], 300, 34, self.font_main)
+        draw_char_exact(d, d4[1], 405, 34, self.font_main)
+        draw_char_exact(d, d4[2], 510, 34, self.font_main)
+        draw_char_exact(d, d4[3], 615, 34, self.font_main)
+
+        # Region
+        if len(reg) == 2:
+            draw_char_exact(d, reg[0], 810, 25, self.font_reg_2)
+            draw_char_exact(d, reg[1], 900, 25, self.font_reg_2)
+        else:
+            draw_char_exact(d, reg[0], 780, 38, self.font_reg_3)
+            draw_char_exact(d, reg[1], 845, 38, self.font_reg_3)
+            draw_char_exact(d, reg[2], 910, 38, self.font_reg_3)
+
+        # RUS text
+        d.text((805, 155), "RUS", font=self.font_rus_long, fill=(15, 15, 15))
+
+        # Russian flag
+        fx, fy, fw, fh = 900, 155, 70, 36
+        sh = fh // 3
+        d.rectangle([fx, fy, fx + fw, fy + sh], fill=(255, 255, 255))
+        d.rectangle([fx, fy + sh, fx + fw, fy + 2 * sh], fill=(0, 57, 166))
+        d.rectangle([fx, fy + 2 * sh, fx + fw, fy + fh], fill=(213, 43, 30))
+        d.rectangle([fx, fy, fx + fw, fy + fh], outline=(15, 15, 15), width=1)
+
+        return im, full_str
+
     def render(self, plate_type: str = "type1", plate_num: str = None) -> Tuple[Image.Image, str]:
         if plate_type == "type1":
             return self.render_type1(plate_num)
@@ -238,6 +305,8 @@ class PlateRenderer:
             return self.render_type1a(plate_num)
         elif plate_type == "type1b":
             return self.render_type1b(plate_num)
+        elif plate_type in ("type2", "trailer"):
+            return self.render_type2(plate_num)
         else:
             raise ValueError(f"Unknown plate_type: {plate_type}")
 

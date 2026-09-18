@@ -52,22 +52,33 @@ models/*.bin
 *.onnx
 *.engine
 
+# Allow production competition ONNX models (< 14 MB total)
+!models/detector_yolo_pose.onnx
+!models/ocr_lprnet_best.onnx
+!models/ocr_lprnet.onnx
+!models/plate_verifier.onnx
+!models/plate_verifier.onnx.data
+
 # YOLO / Training runs
 runs/
 wandb/
 *.log
 
-# Large dataset images (datasets are submitted via cloud drive per competition rules)
+# Large dataset images and crops (datasets are submitted via cloud drive per competition rules)
 dataset/images/real/*
 !dataset/images/real/.gitkeep
 dataset/images/synthetic/*
 !dataset/images/synthetic/.gitkeep
-dataset/labels/synth_*
+dataset/labels/*.txt
 !dataset/labels/.gitkeep
 dataset/labels/synthetic.cache
 dataset/labels/synthetic/
+dataset/labels/real.cache
+dataset/labels/real/
 dataset/labels_pose/
 dataset/yolo_pose/
+dataset/verified_crops/
+dataset/candidates_review/
 dataset/audit_previews/
 dataset/verified_previews/
 dataset/inspect_*/
@@ -78,8 +89,8 @@ preview_*.png
 real_*.jpg
 *.cache
 test_output/
-dataset/labels/real.cache
-dataset/labels/real/
 .jobs/
+submission/*.zip
+results_new_ocr.csv
 
 

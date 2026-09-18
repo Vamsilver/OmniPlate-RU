@@ -26,7 +26,18 @@ class DummyOCR:
     def predict_single(self, crop: np.ndarray, *args, **kwargs):
         # Assert canonical crop size (36, 160, 3)
         assert crop.shape == (36, 160, 3), f"Expected (36, 160, 3), got {crop.shape}"
+        p_type = kwargs.get("plate_type")
+        if p_type == "type1b" or (args and args[0] == "type1b"):
+            return "AA12377", 0.95
         return "A123BC77", 0.95
+
+    def predict_batch(self, crops, plate_types=None, *args, **kwargs):
+        res = []
+        p_types = list(plate_types) if plate_types is not None else ["type1"] * len(crops)
+        for crop, pt in zip(crops, p_types):
+            r = self.predict_single(crop, plate_type=pt, *args, **kwargs)
+            res.append((r[0], r[1], pt))
+        return res
 
 
 
@@ -126,6 +137,166 @@ class TestOmniPlatePipeline(unittest.TestCase):
         processed = self.pipeline.recognize_single(scene, det)
         self.assertEqual(processed.text, "")
         self.assertEqual(processed.ocr_confidence, 0.0)
+
+    def test_is_gost_yellow_plate_positive(self):
+        # Pantone 116C yellow #FFCC00 -> BGR (0, 204, 255)
+        yellow_crop = np.zeros((36, 160, 3), dtype=np.uint8)
+        yellow_crop[:, :] = (0, 204, 255)
+        is_yellow, bg_s, y_ratio = self.pipeline.is_gost_yellow_plate(yellow_crop, s_threshold=60.0)
+        self.assertTrue(is_yellow)
+        self.assertGreaterEqual(bg_s, 150.0)
+        self.assertGreaterEqual(y_ratio, 0.90)
+
+    def test_is_gost_yellow_plate_negative(self):
+        # White/gray plate crop -> BGR (230, 230, 230)
+        white_crop = np.zeros((36, 160, 3), dtype=np.uint8)
+        white_crop[:, :] = (230, 230, 230)
+        is_yellow, bg_s, y_ratio = self.pipeline.is_gost_yellow_plate(white_crop, s_threshold=60.0)
+        self.assertFalse(is_yellow)
+        self.assertLess(bg_s, 60.0)
+
+    def test_recognize_single_type1b_color_demotion(self):
+        # White plate wrongly classified as type1b by detector
+        scene = np.ones((720, 1280, 3), dtype=np.uint8) * 230
+        det = PlateDetection(
+            bbox=(300, 200, 160, 36),
+            quad=[300.0, 200.0, 460.0, 200.0, 460.0, 236.0, 300.0, 236.0],
+            plate_type="type1b",
+            confidence=0.85,
+        )
+        processed = self.pipeline.recognize_single(scene, det)
+        # Should be demoted to type1 due to white background (S < 60)
+        self.assertEqual(processed.plate_type, "type1")
+        self.assertEqual(processed.text, "A123BC77")
+
+    def test_recognize_single_type1b_genuine_yellow(self):
+        # Genuine yellow plate: Pantone 116C
+        scene = np.zeros((720, 1280, 3), dtype=np.uint8)
+        scene[:, :] = (0, 204, 255)
+        det = PlateDetection(
+            bbox=(300, 200, 160, 36),
+            quad=[300.0, 200.0, 460.0, 200.0, 460.0, 236.0, 300.0, 236.0],
+            plate_type="type1b",
+            confidence=0.92,
+        )
+        processed = self.pipeline.recognize_single(scene, det)
+        # Should retain type1b due to saturated yellow background
+        self.assertEqual(processed.plate_type, "type1b")
+
+    def test_recognize_batch(self):
+        scene = np.full((480, 640, 3), 200, dtype=np.uint8)
+        det1 = PlateDetection(
+            bbox=(100, 100, 160, 36),
+            quad=[100.0, 100.0, 260.0, 100.0, 260.0, 136.0, 100.0, 136.0],
+            plate_type="type1",
+            confidence=0.90,
+        )
+        det2 = PlateDetection(
+            bbox=(300, 100, 160, 36),
+            quad=[300.0, 100.0, 460.0, 100.0, 460.0, 136.0, 300.0, 136.0],
+            plate_type="other",
+            confidence=0.85,
+        )
+        results = self.pipeline.recognize_batch(scene, [det1, det2])
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[1].plate_type, "other")
+        self.assertEqual(results[1].text, "")
+
+    def test_recognize_batch_verifier_annulment(self):
+        # When PlateVerifier marks crop as non-plate or OCR has '#', detection is annulled to other
+        class MockVerifier:
+            def is_valid(self): return True
+            def verify_batch(self, crops):
+                # First crop is non-plate (p_score=0.10), second is valid plate (p_score=0.95)
+                return [(False, 0.10), (True, 0.95)]
+
+        self.pipeline.verifier = MockVerifier()
+        scene = np.full((480, 640, 3), 200, dtype=np.uint8)
+        det1 = PlateDetection(
+            bbox=(100, 100, 160, 36),
+            quad=[100.0, 100.0, 260.0, 100.0, 260.0, 136.0, 100.0, 136.0],
+            plate_type="type1",
+            confidence=0.90,
+        )
+        det2 = PlateDetection(
+            bbox=(300, 100, 160, 36),
+            quad=[300.0, 100.0, 460.0, 100.0, 460.0, 136.0, 300.0, 136.0],
+            plate_type="type1",
+            confidence=0.90,
+        )
+        results = self.pipeline.recognize_batch(scene, [det1, det2])
+        # det1 should be annulled to other with text=""
+        self.assertEqual(results[0].plate_type, "other")
+        self.assertEqual(results[0].text, "")
+        self.assertEqual(results[0].ocr_confidence, 0.0)
+        # det2 should be accepted as type1 with text="A123BC77"
+        self.assertEqual(results[1].plate_type, "type1")
+        self.assertEqual(results[1].text, "A123BC77")
+
+    def test_wildcard_mask_retention_when_verified(self):
+        class MockVerifier:
+            def is_valid(self): return True
+            def verify_single(self, crop):
+                return True, 0.85
+
+        self.pipeline.verifier = MockVerifier()
+        # Mock OCR that outputs unreadable mask with wildcards
+        class MockWildcardOCR:
+            def predict_single(self, crop, *args, **kwargs):
+                return "########", 0.0, "type1"
+
+        self.pipeline.ocr = MockWildcardOCR()
+        scene = np.full((480, 640, 3), 200, dtype=np.uint8)
+        det = PlateDetection(
+            bbox=(100, 100, 160, 36),
+            quad=[100.0, 100.0, 260.0, 100.0, 260.0, 136.0, 100.0, 136.0],
+            plate_type="type1",
+            confidence=0.88,
+        )
+        processed = self.pipeline.recognize_single(scene, det)
+        # Should retain type1 and the wildcard mask
+        self.assertEqual(processed.plate_type, "type1")
+        self.assertEqual(processed.text, "########")
+
+        # Now test when PlateVerifier gives low score (unconfirmed noise)
+        class MockFailingVerifier:
+            def is_valid(self): return True
+            def verify_single(self, crop):
+                return False, 0.40
+
+        self.pipeline.verifier = MockFailingVerifier()
+        det_fail = PlateDetection(
+            bbox=(100, 100, 160, 36),
+            quad=[100.0, 100.0, 260.0, 100.0, 260.0, 136.0, 100.0, 136.0],
+            plate_type="type1",
+            confidence=0.88,
+        )
+        processed_fail = self.pipeline.recognize_single(scene, det_fail)
+        # Should be annulled to other with empty text
+        self.assertEqual(processed_fail.plate_type, "other")
+        self.assertEqual(processed_fail.text, "")
+
+    def test_predict_batch(self):
+        img1 = np.full((100, 100, 3), 5, dtype=np.uint8)  # Black dummy image
+        img2 = np.full((100, 100, 3), 5, dtype=np.uint8)
+        batch_res = self.pipeline.predict_batch([img1, img2])
+        self.assertEqual(len(batch_res), 2)
+        self.assertEqual(len(batch_res[0]), 0)
+        self.assertEqual(len(batch_res[1]), 0)
+
+    def test_clean_plate_accuracy_smoke(self):
+        """Smoke test verifying that clean real plates recognize accurately and pass GOST verification."""
+        import cv2
+        img_path = os.path.join(ROOT_DIR, "dataset", "images", "real", "real_type1b_0001.jpg")
+        if os.path.exists(img_path):
+            real_pipe = OmniPlatePipeline(device="cpu")
+            img = cv2.imread(img_path)
+            dets = real_pipe.predict(img)
+            self.assertGreaterEqual(len(dets), 1)
+            best_det = dets[0]
+            self.assertEqual(best_det.plate_type, "type1b")
+            self.assertEqual(best_det.text, "AH889777")
+            self.assertGreaterEqual(best_det.confidence, 0.70)
 
 
 if __name__ == "__main__":

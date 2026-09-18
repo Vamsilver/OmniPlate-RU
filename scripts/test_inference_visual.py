@@ -80,6 +80,23 @@ def draw_detection(
         cv2.LINE_AA,
     )
 
+    # 4. Inset Rectified Plate Crop in Top-Right Corner for Inspection
+    if det.rectified_crop is not None and det.rectified_crop.size > 0:
+        rc = det.rectified_crop
+        rh, rw = rc.shape[:2]
+        target_w = 200
+        target_h = int(rh * (target_w / float(rw)))
+        scaled_crop = cv2.resize(rc, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+
+        ih, iw = vis.shape[:2]
+        ox = iw - target_w - 15
+        oy = 15
+        if ox > 0 and oy + target_h < ih:
+            # White background border
+            cv2.rectangle(vis, (ox - 2, oy - 2), (ox + target_w + 2, oy + target_h + 2), (255, 255, 255), 2)
+            vis[oy:oy+target_h, ox:ox+target_w] = scaled_crop
+            cv2.putText(vis, "WARPED OCR INPUT", (ox, oy - 6), font, 0.45, (0, 255, 255), 1, cv2.LINE_AA)
+
     return vis
 
 

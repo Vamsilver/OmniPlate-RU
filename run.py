@@ -17,6 +17,13 @@ import csv
 import os
 import sys
 import time
+
+# Strict offline mode guarantees for Volga IT 2026 competition runner
+os.environ["YOLO_AUTOINSTALL"] = "0"
+os.environ["ULTRALYTICS_AUTOINSTALL"] = "0"
+os.environ["YOLO_OFFLINE"] = "1"
+os.environ["YOLO_SYNC"] = "0"
+
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -98,7 +105,7 @@ def run_inference(
     input_path: Path,
     output_csv: Path,
     device: str = "cuda",
-    conf_threshold: float = 0.45,
+    conf_threshold: float = 0.06,
     iou_threshold: float = 0.45,
     save_vis_dir: Optional[Path] = None,
     verbose: bool = False,
@@ -162,14 +169,24 @@ def run_inference(
             detections = pipeline.predict(img_bgr)
             dur_ms = (time.perf_counter() - t0) * 1000.0
 
+            if len(detections) > 1:
+                def det_sort_key(d: PlateDetection):
+                    is_target = 1 if d.plate_type in ("type1", "type1a", "type1b") else 0
+                    real_chars = len([c for c in (d.text or "") if c != "#"])
+                    return (is_target, real_chars > 0, real_chars, d.ocr_confidence, d.confidence)
+                detections = sorted(detections, key=det_sort_key, reverse=True)
+
             for det in detections:
                 conf_val = round(det.confidence, 2)
-                plate_text = det.text if det.text else ("" if det.plate_type == "other" else "########")
+                # Strictly adhere to competition classes: type1, type1a, type1b, other
+                out_type = "other" if det.plate_type in ("type2", "other") else det.plate_type
+                raw_text = (det.text or "").strip().upper()
+                plate_text = raw_text if raw_text else ("" if out_type == "other" else "########")
 
                 writer.writerow([
                     img_file.name,
                     plate_text,
-                    det.plate_type,
+                    out_type,
                     f"{conf_val:.2f}",
                 ])
                 total_detections += 1
@@ -198,6 +215,20 @@ def run_inference(
     return len(image_files), total_detections, total_time
 
 
+def resolve_device(device_arg: str) -> str:
+    """Auto-detects CUDA hardware if 'auto' is specified, otherwise honors explicit choice."""
+    arg_lower = device_arg.strip().lower()
+    if arg_lower == "auto":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+        except ImportError:
+            pass
+        return "cpu"
+    return arg_lower
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="OmniPlate-RU: Volga IT 2026 Vehicle License Plate Recognition",
@@ -220,13 +251,14 @@ def main():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda",
-        help="Inference device ('cuda' or 'cpu')",
+        default="auto",
+        choices=["auto", "cuda", "cpu"],
+        help="Inference device ('auto' detects CUDA if available, 'cuda', or 'cpu')",
     )
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.45,
+        default=0.12,
         help="Detector confidence threshold",
     )
     parser.add_argument(
@@ -253,15 +285,20 @@ def main():
     input_path = Path(args.input_path)
     output_csv = Path(args.output_file)
     vis_dir = Path(args.save_vis) if args.save_vis else None
+    resolved_device = resolve_device(args.device)
 
     if not input_path.exists():
         print(f"[-] Error: Input path does not exist: {input_path}")
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f, delimiter=";")
+            writer.writerow(["image", "plate_num", "plate_type", "confidence"])
         sys.exit(1)
 
     run_inference(
         input_path=input_path,
         output_csv=output_csv,
-        device=args.device,
+        device=resolved_device,
         conf_threshold=args.conf,
         iou_threshold=args.iou,
         save_vis_dir=vis_dir,
