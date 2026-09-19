@@ -30,28 +30,32 @@
 Для соблюдения жесткого норматива времени инференса ($\le 100$ мс на референсном стенде Intel Core i5 + NVIDIA GTX 1050 Ti 4GB) и преодоления проблемы редких типов знаков разработана модульная каскадная архитектура без тяжелых трансформеров:
 
 ```mermaid
-flowchart LR
-    A["Входной кадр (1080p/720p/4K)"] --> B["YOLOv8n-pose (ONNX FP16)<br/>BBox + 4 угла (Quad) + Класс"]
+flowchart TD
+    A["Входной кадр (1080p / 720p / 4K)"] --> B["YOLOv8n-pose (ONNX FP16)<br/>BBox + 4 угла (Quad) + Класс"]
     B --> C["Safety Max-Dim Guard<br/>& Subpixel Corner Refinement"]
     C --> D["PlateRectifier<br/>Перспективная гомография 3x3"]
-    D --> E{"Тип пластины?"}
-    E -->|"Тип 1 / 1Б"| F["Канонический кроп 160x36"]
-    E -->|"Тип 1А (Квадрат)"| G["Adaptive Split & Stitch<br/>Динамический межстрочный шов"]
+    
+    D --> E{"Класс и геометрия пластины?"}
+    E -->|"Тип 1 / 1Б (Однострочный)"| F["Канонический кроп 160x36 px"]
+    E -->|"Тип 1А (Квадратный 2D)"| G["Канонический 2D-кроп 160x96 px"]
+    
     F --> V["PlateVerifier (ONNX 30 КБ)<br/>Depthwise Conv Guard"]
     G --> V
+    
     V -->|"Фон / Негатив"| J1["Класс other (0 Fatal Penalties)"]
     
     subgraph MoE["MoE Routing (Type-Conditioned Mixture of Experts)"]
         V -->|"Подтверждено"| R{"Роутер типа"}
         R -->|"Тип 1"| H1["LPRNet-v3 (1D-ASPP + ECA-Net)"]
         R -->|"Тип 1Б / Прицеп"| H2["LPRNet-v2 (RF 61px Dilated)"]
-        R -->|"Тип 1А"| H3["2D Dual-Line + Split-Stitch Consensus"]
+        R -->|"Тип 1А (Квадрат)"| H3["2D Dual-Line Native LPRNet<br/>(Опц. арбитраж Split & Stitch)"]
     end
     
     H1 --> I["FSM Beam Search Decoder<br/>Конечный автомат ГОСТ + Регионы РФ"]
     H2 --> I
     H3 --> I
-    I --> K["Триангуляционный арбитраж"]
+    
+    I --> K["Триангуляционный арбитраж консенсуса"]
     K --> J2["Выходной CSV (results.csv)"]
 ```
 
