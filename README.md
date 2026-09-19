@@ -39,9 +39,18 @@ flowchart LR
     E -->|"Тип 1А (Квадрат)"| G["Adaptive Split & Stitch<br/>Динамический межстрочный шов"]
     F --> V["PlateVerifier (ONNX 30 КБ)<br/>Depthwise Conv Guard"]
     G --> V
-    V -->|"Подтверждено"| H["MoE OCR (Mixture of Experts)<br/>LPRNet-v3 / v2 / 2D Dual-Line"]
     V -->|"Фон / Негатив"| J1["Класс other (0 Fatal Penalties)"]
-    H --> I["FSM Beam Search Decoder<br/>Конечный автомат ГОСТ + Регионы РФ"]
+    
+    subgraph MoE["MoE Routing (Type-Conditioned Mixture of Experts)"]
+        V -->|"Подтверждено"| R{"Роутер типа"}
+        R -->|"Тип 1"| H1["LPRNet-v3 (1D-ASPP + ECA-Net)"]
+        R -->|"Тип 1Б / Прицеп"| H2["LPRNet-v2 (RF 61px Dilated)"]
+        R -->|"Тип 1А"| H3["2D Dual-Line + Split-Stitch Consensus"]
+    end
+    
+    H1 --> I["FSM Beam Search Decoder<br/>Конечный автомат ГОСТ + Регионы РФ"]
+    H2 --> I
+    H3 --> I
     I --> K["Триангуляционный арбитраж"]
     K --> J2["Выходной CSV (results.csv)"]
 ```
