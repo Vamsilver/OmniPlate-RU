@@ -56,12 +56,12 @@ flowchart LR
     B --> C["Геометрический фильтр<br/>Aspect Ratio & Subpixel"]
     C --> D["PlateRectifier<br/>Гомография 3x3"]
     D --> E{"Тип знака?"}
-    E -->|Тип 1 / 1Б| F["Канонический кроп 160x36"]
-    E -->|Тип 1А (Квадрат)| G["Адаптивный Split & Stitch<br/>Динамический шов"]
+    E -->|"Тип 1 / 1Б"| F["Канонический кроп 160x36"]
+    E -->|"Тип 1А (Квадрат)"| G["Адаптивный Split & Stitch<br/>Динамический шов"]
     F --> V["PlateVerifier (ONNX 30 КБ)<br/>Отсечение фона и фар"]
     G --> V
-    V -->|Подтверждено| H["MoE OCR (Mixture of Experts)<br/>LPRNet-v3 / v2 / 2D Dual-Line"]
-    V -->|Фон / Other| J1["Класс 'other' (0 Fatal Penalties)"]
+    V -->|"Подтверждено"| H["MoE OCR (Mixture of Experts)<br/>LPRNet-v3 / v2 / 2D Dual-Line"]
+    V -->|"Фон / Other"| J1["Класс other (0 Fatal Penalties)"]
     H --> I["FSM Beam Search Decoder<br/>Конечный автомат ГОСТ, регионы РФ"]
     I --> K["Консенсус-гвард и арбитраж"]
     K --> J2["Выходной CSV (results.csv)"]

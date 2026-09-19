@@ -35,12 +35,12 @@ flowchart LR
     B --> C["Safety Max-Dim Guard<br/>& Subpixel Corner Refinement"]
     C --> D["PlateRectifier<br/>Перспективная гомография 3x3"]
     D --> E{"Тип пластины?"}
-    E -->|Тип 1 / 1Б| F["Канонический кроп 160x36"]
-    E -->|Тип 1А (Квадрат)| G["Adaptive Split & Stitch<br/>Динамический межстрочный шов"]
+    E -->|"Тип 1 / 1Б"| F["Канонический кроп 160x36"]
+    E -->|"Тип 1А (Квадрат)"| G["Adaptive Split & Stitch<br/>Динамический межстрочный шов"]
     F --> V["PlateVerifier (ONNX 30 КБ)<br/>Depthwise Conv Guard"]
     G --> V
-    V -->|Подтверждено| H["MoE OCR (Mixture of Experts)<br/>LPRNet-v3 / v2 / 2D Dual-Line"]
-    V -->|Фон / Негатив| J1["Класс 'other' (0 Fatal Penalties)"]
+    V -->|"Подтверждено"| H["MoE OCR (Mixture of Experts)<br/>LPRNet-v3 / v2 / 2D Dual-Line"]
+    V -->|"Фон / Негатив"| J1["Класс other (0 Fatal Penalties)"]
     H --> I["FSM Beam Search Decoder<br/>Конечный автомат ГОСТ + Регионы РФ"]
     I --> K["Триангуляционный арбитраж"]
     K --> J2["Выходной CSV (results.csv)"]
