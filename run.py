@@ -323,7 +323,7 @@ def main():
         "--ocr_version", "--ocr-version",
         dest="ocr_version",
         type=str,
-        default="v2",
+        default="moe",
         choices=["v2", "v3", "auto", "moe"],
         help="OCR model version: 'v2' (dilated RF=61px, 1.13MB), 'v3' (1D-ASPP + ECA-Net, 1.81MB), or 'auto'/'moe' (Type-Conditioned Routing: v3 Type 1, v2 Type 1B, 2D Type 1A)",
     )

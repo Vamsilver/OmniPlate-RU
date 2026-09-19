@@ -96,7 +96,7 @@ class OmniPlatePipeline:
         imgsz: int = 640,
         use_onnx: bool = True,
         ocr_1a_mode: str = "ensemble",
-        ocr_version: str = "v2",
+        ocr_version: str = "moe",
         enable_crop_fallback: bool = False,
     ) -> None:
         self.device = self._resolve_device(device)
@@ -601,6 +601,7 @@ class OmniPlatePipeline:
             quad_ar = w_top / max(h_left, 1.0)
             effective_ar = min(bbox_ar, quad_ar)
 
+            alt_1a = None
             # Type 1B yellow passenger plates are always handled with single-line rectification
             if plate_type == "type1b":
                 rectified = self.rectifier.rectify(image, detection.quad, plate_type="type1b", margin=(0.020, 0.015), refine_corners=True)
@@ -783,6 +784,8 @@ class OmniPlatePipeline:
                         detection.plate_type = "type1a"
                         v_crop = rect_1a
                     else:
+                        if v_1a_valid and conf_1a >= 0.40:
+                            alt_1a = (text_1a, conf_1a, rect_1a)
                         detection.rectified_crop = rect_1
                         if type_1 == "type1b" and not self.is_gost_yellow_plate(rect_1)[0]:
                             type_1 = "type1"
@@ -852,10 +855,15 @@ class OmniPlatePipeline:
                         detection.ocr_confidence = 0.0
                 else:
                     # Type 1A confirmed valid: stitched crops have artificial seam, verifier p_score is not calibrated for stitched crops when OCR is strictly valid
-                    if detection.plate_type == "type1a" and is_gost_strict and detection.ocr_confidence >= 0.50 and detection.confidence >= 0.45 and not detection.is_soft_fallback:
-                        is_non_plate = False
-                    elif detection.plate_type == "type1a" and is_gost_strict and detection.ocr_confidence >= 0.65 and detection.confidence >= 0.50 and not detection.is_soft_fallback:
-                        is_non_plate = (p_score < 0.0001)
+                    if detection.plate_type == "type1a" and is_gost_strict and not detection.is_soft_fallback:
+                        if (
+                            (detection.ocr_confidence >= 0.80 and detection.confidence >= 0.20 and (detection.confidence * detection.ocr_confidence) >= 0.18)
+                            or (detection.ocr_confidence >= 0.65 and detection.confidence >= 0.35)
+                            or (detection.ocr_confidence >= 0.50 and detection.confidence >= 0.45)
+                        ):
+                            is_non_plate = False
+                        else:
+                            is_non_plate = (p_score < 0.0001)
                     elif is_gost_strict and detection.ocr_confidence >= 0.70 and detection.confidence >= 0.50 and not detection.is_soft_fallback:
                         is_non_plate = (p_score < 0.20)
                     else:
@@ -878,6 +886,8 @@ class OmniPlatePipeline:
                         and (detection.confidence * detection.ocr_confidence) >= 0.18
                         and detection.confidence >= 0.15
                     )
+                    if is_high_conf_gost and detection.plate_type == "type1a":
+                        is_non_plate = False
                     if not is_high_conf_gost:
                         if (
                             detection.confidence < 0.10
@@ -892,9 +902,15 @@ class OmniPlatePipeline:
                     # GOST format guard: reject plates that don't match any valid Russian format
                     is_invalid_ocr = not is_gost_strict
                     if is_non_plate or is_invalid_ocr:
-                        detection.plate_type = "other"
-                        detection.text = ""
-                        detection.ocr_confidence = 0.0
+                        if alt_1a is not None and is_valid_gost_plate(alt_1a[0], "type1a", allow_wildcards=False) and alt_1a[1] >= 0.45:
+                            detection.plate_type = "type1a"
+                            detection.text = alt_1a[0]
+                            detection.ocr_confidence = round(alt_1a[1], 4)
+                            detection.rectified_crop = alt_1a[2]
+                        else:
+                            detection.plate_type = "other"
+                            detection.text = ""
+                            detection.ocr_confidence = 0.0
 
                 # Safe blind plate fallback for unreadable/blind crops with confident detector & verifier (single-line only)
                 if (
@@ -1065,8 +1081,15 @@ class OmniPlatePipeline:
                         det.ocr_confidence = 0.0
                 else:
                     # Type 1A confirmed valid: only reject on extreme verifier failure (stitched crop scores differ)
-                    if det.plate_type == "type1a" and is_gost_strict and det.ocr_confidence >= 0.65 and det.confidence >= 0.50 and not det.is_soft_fallback:
-                        is_non_plate = (p_score < 0.001)
+                    if det.plate_type == "type1a" and is_gost_strict and not det.is_soft_fallback:
+                        if (
+                            (det.ocr_confidence >= 0.80 and det.confidence >= 0.20 and (det.confidence * det.ocr_confidence) >= 0.18)
+                            or (det.ocr_confidence >= 0.65 and det.confidence >= 0.35)
+                            or (det.ocr_confidence >= 0.50 and det.confidence >= 0.45)
+                        ):
+                            is_non_plate = False
+                        else:
+                            is_non_plate = (p_score < 0.001)
                     elif is_gost_strict and det.ocr_confidence >= 0.70 and det.confidence >= 0.50 and not det.is_soft_fallback:
                         is_non_plate = (p_score < 0.20)
                     else:
@@ -1089,6 +1112,8 @@ class OmniPlatePipeline:
                         and (det.confidence * det.ocr_confidence) >= 0.18
                         and det.confidence >= 0.15
                     )
+                    if is_high_conf_gost and det.plate_type == "type1a":
+                        is_non_plate = False
                     if not is_high_conf_gost:
                         if (
                             det.confidence < 0.10

@@ -276,7 +276,8 @@ class PlateCropDataset(Dataset):
                 if len(row) < 10:
                     continue
                 img_rel, plate_num, p_type, bbox_str, quad_str, is_veh, is_syn = row[:7]
-                if p_type not in ("type1", "type1a", "type1b"):
+                # STRICT TYPE 1 ISOLATION (MoE Specialization)
+                if p_type != "type1":
                     continue
                 item_dict = {
                     "img_rel": img_rel,
@@ -301,7 +302,8 @@ class PlateCropDataset(Dataset):
                 for m_row in m_reader:
                     if len(m_row) >= 3:
                         c_file, p_num, p_type = m_row[0], m_row[1], m_row[2]
-                        if p_type not in ("type1", "type1a", "type1b", "type2"):
+                        # STRICT TYPE 1 ISOLATION
+                        if p_type != "type1":
                             continue
                         c_path = os.path.join("verified_crops", c_file)
                         item_dict = {
@@ -310,7 +312,14 @@ class PlateCropDataset(Dataset):
                             "plate_type": p_type,
                             "is_pre_cropped": True,
                         }
-                        if c_file.startswith("crop_ref_") or c_file.startswith("crop_1b_") or "real" in c_file:
+                        is_real = (
+                            c_file.startswith("crop_ref_")
+                            or c_file.startswith("crop_1_")
+                            or c_file.startswith("crop_nomer")
+                            or c_file.startswith("user_gt_")
+                            or "real" in c_file
+                        )
+                        if is_real:
                             real_curated.append(item_dict)
                         else:
                             synth_hard.append(item_dict)
@@ -329,7 +338,7 @@ class PlateCropDataset(Dataset):
         train_real = all_real[n_val_real:]
 
         if self.is_train:
-            self.samples = train_synth + (train_real * 8)
+            self.samples = train_synth + (train_real * 6)
             random.shuffle(self.samples)
         else:
             self.samples = val_synth + val_real
@@ -441,6 +450,7 @@ def main():
     parser.add_argument("--workers", type=int, default=0, help="Dataloader workers")
     parser.add_argument("--resume-from", type=str, default="", help="Optional checkpoint path to resume from")
     parser.add_argument("--output-dir", type=str, default="models", help="Output directory for checkpoints")
+    parser.add_argument("--from-scratch", action="store_true", help="Train completely from scratch with clean initialization")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -480,28 +490,63 @@ def main():
     model = LPRNetV3(num_classes=NUM_CLASSES, dropout_rate=0.2).to(device)
     best_acc = 0.0
 
-    # Smart warm-start from existing checkpoint or resume
-    init_ckpt = args.resume_from if args.resume_from else os.path.join(args.output_dir, "ocr_lprnet_v3.pt")
-    if not os.path.exists(init_ckpt):
-        init_ckpt = os.path.join(args.output_dir, "ocr_lprnet_best.pt")
+    if args.from_scratch:
+        def init_weights(m):
+            if isinstance(m, (nn.Conv2d, nn.Conv1d)):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+        model.apply(init_weights)
+        print("[+] Training completely FROM SCRATCH: Kaiming Normal initialization applied.")
+    else:
+        # Smart warm-start from existing checkpoint or resume
+        init_ckpt = args.resume_from if args.resume_from else os.path.join(args.output_dir, "ocr_lprnet_v3.pt")
+        if not os.path.exists(init_ckpt):
+            init_ckpt = os.path.join(args.output_dir, "ocr_lprnet_best.pt")
 
-    if os.path.exists(init_ckpt):
-        try:
-            ckpt = torch.load(init_ckpt, map_location=device)
-            st = ckpt.get("state_dict", ckpt)
-            model_st = model.state_dict()
-            loaded = 0
-            for k, v in st.items():
-                if k in model_st and model_st[k].shape == v.shape:
-                    model_st[k] = v
-                    loaded += 1
-            model.load_state_dict(model_st)
-            prev_acc = ckpt.get("seq_acc", 0.0)
-            if "ocr_lprnet_v3" in init_ckpt and prev_acc > 0.0:
-                best_acc = prev_acc
-            print(f"[+] Smart Warm-Start: Loaded {loaded}/{len(model_st)} parameter tensors from {init_ckpt} (prev acc: {best_acc:.2f}%)")
-        except Exception as e:
-            print(f"[!] Warning: Could not warm-start from checkpoint: {e}")
+        if os.path.exists(init_ckpt):
+            try:
+                ckpt = torch.load(init_ckpt, map_location=device)
+                st = ckpt.get("state_dict", ckpt)
+                model_st = model.state_dict()
+                loaded = 0
+                for k, v in st.items():
+                    if k in model_st and model_st[k].shape == v.shape:
+                        model_st[k] = v
+                        loaded += 1
+                model.load_state_dict(model_st)
+                print(f"[+] Smart Warm-Start: Loaded {loaded}/{len(model_st)} parameter tensors from {init_ckpt}")
+            except Exception as e:
+                print(f"[!] Warning: Could not warm-start from checkpoint: {e}")
+
+    # Evaluate baseline accuracy on pure Type 1 validation set
+    print("[*] Evaluating baseline on pure Type 1 validation split...")
+    model.eval()
+    base_correct, base_total = 0, 0
+    base_char_correct, base_char_total = 0, 0
+    with torch.no_grad():
+        for tensors, _, _, ground_truths, plate_types in val_loader:
+            tensors = tensors.to(device)
+            logits = model(tensors)
+            preds = logits.argmax(dim=-1).cpu().numpy()
+            for i, gt in enumerate(ground_truths):
+                pt = plate_types[i]
+                pred_str = CTCDecoder.decode_greedy(preds[i], blank_idx=BLANK_IDX)
+                pred_str = CTCDecoder.apply_gost_heuristics(pred_str, plate_type=pt)
+                if pred_str == gt:
+                    base_correct += 1
+                base_total += 1
+                min_len = min(len(pred_str), len(gt))
+                base_char_correct += sum(1 for c1, c2 in zip(pred_str[:min_len], gt[:min_len]) if c1 == c2)
+                base_char_total += max(len(pred_str), len(gt))
+    base_seq_acc = (base_correct / max(1, base_total)) * 100.0
+    base_char_acc = (base_char_correct / max(1, base_char_total)) * 100.0
+    base_cer = (1.0 - (base_char_correct / max(1, base_char_total))) * 100.0
+    best_acc = base_seq_acc
+    print(f"[*] Baseline Type 1 Val: SeqAcc = {base_seq_acc:.2f}%, CharAcc = {base_char_acc:.2f}%, CER = {base_cer:.2f}%")
 
     ctc_loss = nn.CTCLoss(blank=BLANK_IDX, zero_infinity=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -549,8 +594,6 @@ def main():
         val_total = 0
         val_char_correct = 0
         val_char_total = 0
-        by_type_correct = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0}
-        by_type_total = {"type1": 0, "type1a": 0, "type1b": 0, "type2": 0}
 
         with torch.no_grad():
             for tensors, _, _, ground_truths, plate_types in val_loader:
@@ -565,11 +608,7 @@ def main():
 
                     if pred_str == gt:
                         val_correct += 1
-                        if pt in by_type_correct:
-                            by_type_correct[pt] += 1
                     val_total += 1
-                    if pt in by_type_total:
-                        by_type_total[pt] += 1
 
                     min_len = min(len(pred_str), len(gt))
                     val_char_correct += sum(1 for c1, c2 in zip(pred_str[:min_len], gt[:min_len]) if c1 == c2)
@@ -577,16 +616,12 @@ def main():
 
         seq_acc = (val_correct / max(1, val_total)) * 100.0
         char_acc = (val_char_correct / max(1, val_char_total)) * 100.0
-        acc_t1 = (by_type_correct["type1"] / max(1, by_type_total["type1"])) * 100.0
-        acc_t1a = (by_type_correct["type1a"] / max(1, by_type_total["type1a"])) * 100.0
-        acc_t1b = (by_type_correct["type1b"] / max(1, by_type_total["type1b"])) * 100.0
-        acc_t2 = (by_type_correct["type2"] / max(1, by_type_total["type2"])) * 100.0
+        cer = (1.0 - (val_char_correct / max(1, val_char_total))) * 100.0
 
         elapsed = time.time() - start_t
         print(f"Epoch [{epoch:02d}/{args.epochs:02d}] ({elapsed:.1f}s) | "
               f"Loss: {train_loss:.4f} | "
-              f"Val SeqAcc: {seq_acc:.2f}% (CharAcc: {char_acc:.2f}%) | "
-              f"T1: {acc_t1:.1f}% | 1A: {acc_t1a:.1f}% | 1B: {acc_t1b:.1f}% | T2: {acc_t2:.1f}%")
+              f"Type 1 Val SeqAcc: {seq_acc:.2f}% | CharAcc: {char_acc:.2f}% | CER: {cer:.2f}% (Best: {best_acc:.2f}%)")
 
         if seq_acc >= best_acc:
             best_acc = seq_acc
@@ -595,9 +630,11 @@ def main():
                 "state_dict": model.state_dict(),
                 "seq_acc": seq_acc,
                 "char_acc": char_acc,
+                "cer": cer,
                 "arch": "LPRNetV3_1D_ASPP_ECA",
+                "specialization": "type1_isolated",
             }, best_ckpt_path)
-            print(f"  [*] Saved new best LPRNet-v3 checkpoint: {best_ckpt_path} (SeqAcc: {seq_acc:.2f}%)")
+            print(f"  [*] Saved new best LPRNet-v3 checkpoint: {best_ckpt_path} (Type 1 SeqAcc: {seq_acc:.2f}%)")
 
     # Export ONNX
     print("\n[+] Exporting Best LPRNet-v3 to ONNX...")
