@@ -233,22 +233,38 @@ def generate_manifest(zip_size_mb: float):
     print("📋 Generating Submission Manifest")
     print("=" * 65)
 
+    DATASET_ZIP = SUBMISSION_DIR / "OmniPlate-RU_dataset.zip"
     manifest_lines = [
         "=" * 70,
         "OMNIPLATE-RU: SUBMISSION MANIFEST (VOLGA IT 2026)",
         "=" * 70,
-        f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-        f"Target Competition: Volga IT 2026 (Semi-Final)",
-        f"Track: AI & Data Analysis (AIS Gorod)",
-        f"Repository: https://github.com/Vamsilver/OmniPlate-RU",
+        f"Generated:           {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Target Competition:  Volga IT 2026 (Semi-Final)",
+        f"Track:               AI & Data Analysis (AIS Gorod)",
+        f"Repository:          https://github.com/Vamsilver/OmniPlate-RU",
         "-" * 70,
-        "ARCHIVE INFORMATION:",
-        f"  File:           {SOLUTION_ZIP.name}",
-        f"  Size:           {zip_size_mb:.2f} MB",
-        f"  SHA-256:        {compute_sha256(SOLUTION_ZIP)}",
+        "ARCHIVES SUMMARY:",
+        f"  1. Solution Archive:",
+        f"     File:           {SOLUTION_ZIP.name}",
+        f"     Size:           {zip_size_mb:.2f} MB (< 20 MB SLA)",
+        f"     SHA-256:        {compute_sha256(SOLUTION_ZIP)}",
+    ]
+
+    if DATASET_ZIP.exists():
+        ds_mb = DATASET_ZIP.stat().st_size / (1024 * 1024)
+        ds_sha = compute_sha256(DATASET_ZIP)
+        manifest_lines.extend([
+            f"",
+            f"  2. Dataset Archive:",
+            f"     File:           {DATASET_ZIP.name}",
+            f"     Size:           {ds_mb:.2f} MB",
+            f"     SHA-256:        {ds_sha}",
+        ])
+
+    manifest_lines.extend([
         "-" * 70,
         "MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):",
-    ]
+    ])
 
     for model_rel in REQUIRED_MODELS:
         mpath = PROJECT_ROOT / model_rel

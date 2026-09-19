@@ -1,15 +1,15 @@
 ============================================================
-🔍 Starting Dataset Validation for: dataset
+рџ”Ќ Starting Dataset Validation for: dataset
 ============================================================
 
-📋 Checking meta.csv...
+рџ“‹ Checking meta.csv...
 
-📊 Dataset Statistics & Quota Evaluation:
-  • Total Plate Annotations: 6518
-  • Synthetic Images Count:  5000 (Quota: >= 5000) -> ✅ PASS
-  • Real Images Count:       1518
+рџ“Љ Dataset Statistics & Quota Evaluation:
+  вЂў Total Plate Annotations: 6518
+  вЂў Synthetic Images Count:  5000 (Quota: >= 5000) -> вњ… PASS
+  вЂў Real Images Count:       1518
     - Type 1A (Square):      318 real (Quota: >= 150 imgs, >= 50 unique) [Unique: 155]
     - Type 1B (Yellow):      306 real (Quota: >= 300 imgs, >= 100 unique) [Unique: 277]
     - Other (Negative):      251 real (Quota: >= 50 imgs)
 
-✅ VALIDATION PASSED: All schema, geometry, and format checks passed successfully!
+вњ… VALIDATION PASSED: All schema, geometry, and format checks passed successfully!
