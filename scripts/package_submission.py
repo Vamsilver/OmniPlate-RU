@@ -259,6 +259,7 @@ def generate_manifest(zip_size_mb: float):
             f"     File:           {DATASET_ZIP.name}",
             f"     Size:           {ds_mb:.2f} MB",
             f"     SHA-256:        {ds_sha}",
+            f"     Cloud Link:     https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing",
         ])
 
     manifest_lines.extend([

@@ -19,7 +19,7 @@ OmniPlate-RU_Submission/
 ├── 📄 EXPLANATORY_NOTE.pdf       # Пояснительная записка (до 5 страниц по ГОСТ 7.32)
 ├── 📦 OmniPlate-RU_solution.zip  # Полный код, 5 моделей ONNX, CLI run.py, тесты (< 20 МБ)
 ├── 🌐 Ссылка на GitHub          # https://github.com/Vamsilver/OmniPlate-RU
-├── ☁️ Ссылка на Датасет          # Облачное хранилище (5 000 синтетика + 1 518 реал)
+├── ☁️ Ссылка на Датасет          # https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 └── 📋 SUBMISSION_MANIFEST.txt    # Манифест с контрольными суммами SHA-256
 ```
 
@@ -124,7 +124,7 @@ python scripts/package_submission.py
    Ссылка: [Вставить прямую ссылку на архив / прикреплен к письму]
 
 3. Полный датасет (6 518 аннотаций: 5 000 синтетика + 1 518 реал с деидентификацией лиц):
-   Ссылка на облачное хранилище: [Вставить ссылку на Яндекс.Диск / Cloud Mail]
+   Ссылка на облачное хранилище: https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 
 4. Пояснительная записка (до 5 страниц по регламенту ТЗ):
    Файл: docs/report/EXPLANATORY_NOTE.md (также приложен EXPLANATORY_NOTE.pdf)

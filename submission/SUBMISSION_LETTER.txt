@@ -20,8 +20,8 @@
      Файл:    OmniPlate-RU_dataset.zip (959.19 МБ)
      SHA-256: 05e130c19e38ea855896cb09faf4d4aae72d06dd13a0605f49e235324d9eec90
      Состав:  6 518 аннотаций (5 000 процедурная синтетика + 1 518 реальных дорожных кадров)
-     Ссылка на облачный диск (Яндекс.Диск / Google Drive):
-     👉 [ВСТАВЬТЕ_ВАШУ_ССЫЛКУ_НА_ОБЛАЧНЫЙ_ДИСК_С_ДАТАСЕТОМ] 👈
+     Ссылка на облачный диск (Google Drive):
+     https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 
 1.4. Пояснительная записка (до 5 страниц по ГОСТ 7.32 / ТЗ):
      Файл в репозитории: docs/report/EXPLANATORY_NOTE.md

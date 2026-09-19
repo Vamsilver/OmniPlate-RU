@@ -277,6 +277,7 @@ def update_manifest(dataset_size_mb: float, dataset_sha: str, dataset_files: int
         f"     Size:           {dataset_size_mb:.2f} MB",
         f"     Files Packed:   {dataset_files:,}",
         f"     SHA-256:        {dataset_sha}",
+        f"     Cloud Link:     https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing",
         "-" * 70,
         "MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):",
     ]
@@ -350,8 +351,8 @@ def generate_submission_letter(dataset_size_mb: float, dataset_sha: str):
      Файл:    OmniPlate-RU_dataset.zip ({dataset_size_mb:.2f} МБ)
      SHA-256: {dataset_sha}
      Состав:  6 518 аннотаций (5 000 процедурная синтетика + 1 518 реальных дорожных кадров)
-     Ссылка на облачный диск (Яндекс.Диск / Google Drive):
-     👉 [ВСТАВЬТЕ_ВАШУ_ССЫЛКУ_НА_ОБЛАЧНЫЙ_ДИСК_С_ДАТАСЕТОМ] 👈
+     Ссылка на облачный диск (Google Drive):
+     https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 
 1.4. Пояснительная записка (до 5 страниц по ГОСТ 7.32 / ТЗ):
      Файл в репозитории: docs/report/EXPLANATORY_NOTE.md
