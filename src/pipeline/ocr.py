@@ -289,10 +289,224 @@ try:
             out = out.permute(0, 2, 1)    # (B, 40, num_classes)
             return out
 
+
+    class LPRNet2D(nn.Module):
+        """
+        Native 2D License Plate Recognition Network for Type 1A square plates.
+        Accepts canonical (B, 3, 96, 160) input crops without Split & Stitch seams.
+        Outputs CTC logits (B, seq_len=80, num_classes) where:
+          - Steps 0..39: Top line (Series letter + 3 digits, e.g. 'A123')
+          - Steps 40..79: Bottom line (2 Series letters + 2-3 digits region, e.g. 'BC77' / 'BC716')
+        """
+        def __init__(self, num_classes: int = NUM_CLASSES, dropout_rate: float = 0.2):
+            super().__init__()
+            self.num_classes = num_classes
+
+            # Stem: 96x160 -> 48x80
+            self.stem = nn.Sequential(
+                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(kernel_size=3, stride=(2, 2), padding=1),
+            )
+            self.block1 = SmallBasicBlock(64, 64)
+            self.pool1 = nn.MaxPool2d(kernel_size=3, stride=(2, 2), padding=1)  # 24x40
+            self.block2 = SmallBasicBlock(64, 128)
+            self.block3 = SmallBasicBlock(128, 256)
+            self.pool2 = nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))  # 12x40
+            self.block4 = SmallBasicBlock(256, 256)
+
+            # Spatial pooling: preserves 2 vertical bins (row 0 = top line, row 1 = bottom line)
+            self.pool3 = nn.AdaptiveAvgPool2d((2, 40))
+            self.global_pool_stem = nn.AdaptiveAvgPool2d((2, 40))
+            self.global_pool_b2 = nn.AdaptiveAvgPool2d((2, 40))
+
+            fused_channels = 64 + 128 + 256
+
+            self.classifier = nn.Sequential(
+                nn.Dropout(dropout_rate),
+                nn.Conv2d(fused_channels, 256, kernel_size=1, bias=False),
+                nn.BatchNorm2d(256),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout_rate),
+                nn.Conv2d(256, num_classes, kernel_size=1),
+            )
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            f_stem = self.stem(x)
+            f_b1 = self.block1(f_stem)
+            f_p1 = self.pool1(f_b1)
+            f_b2 = self.block2(f_p1)
+            f_b3 = self.block3(f_b2)
+            f_p2 = self.pool2(f_b3)
+            f_b4 = self.block4(f_p2)
+            f_p3 = self.pool3(f_b4)
+
+            f1 = self.global_pool_stem(f_stem)
+            f2 = self.global_pool_b2(f_b2)
+            f_fused = torch.cat([f1, f2, f_p3], dim=1)  # (B, 448, 2, 40)
+
+            logits = self.classifier(f_fused)  # (B, num_classes, 2, 40)
+            r0 = logits[:, :, 0, :]            # (B, num_classes, 40)
+            r1 = logits[:, :, 1, :]            # (B, num_classes, 40)
+            unrolled = torch.cat([r0, r1], dim=2)  # (B, num_classes, 80)
+            return unrolled.permute(0, 2, 1)      # (B, 80, num_classes)
+
+
+    class ASPPBlock1D(nn.Module):
+        """
+        1D Atrous Spatial Pyramid Pooling (ASPP) block for horizontal character sequences:
+        Evaluates fine strokes (d=1), character bodies (d=2), and multi-char context (d=4).
+        """
+        def __init__(self, in_c: int, out_c: int):
+            super().__init__()
+            mid_c = out_c // 4
+            self.b1 = nn.Sequential(
+                nn.Conv2d(in_c, mid_c, kernel_size=1, bias=False),
+                nn.BatchNorm2d(mid_c),
+                nn.ReLU(inplace=True),
+            )
+            self.b2 = nn.Sequential(
+                nn.Conv2d(in_c, mid_c, kernel_size=(1, 3), padding=(0, 1), dilation=(1, 1), bias=False),
+                nn.BatchNorm2d(mid_c),
+                nn.ReLU(inplace=True),
+            )
+            self.b3 = nn.Sequential(
+                nn.Conv2d(in_c, mid_c, kernel_size=(1, 3), padding=(0, 2), dilation=(1, 2), bias=False),
+                nn.BatchNorm2d(mid_c),
+                nn.ReLU(inplace=True),
+            )
+            self.b4 = nn.Sequential(
+                nn.Conv2d(in_c, mid_c, kernel_size=(1, 3), padding=(0, 4), dilation=(1, 4), bias=False),
+                nn.BatchNorm2d(mid_c),
+                nn.ReLU(inplace=True),
+            )
+            self.proj = nn.Sequential(
+                nn.Conv2d(mid_c * 4, out_c, kernel_size=1, bias=False),
+                nn.BatchNorm2d(out_c),
+            )
+            self.shortcut = (
+                nn.Sequential(
+                    nn.Conv2d(in_c, out_c, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(out_c),
+                )
+                if in_c != out_c
+                else nn.Identity()
+            )
+            self.relu = nn.ReLU(inplace=True)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            y1 = self.b1(x)
+            y2 = self.b2(x)
+            y3 = self.b3(x)
+            y4 = self.b4(x)
+            cat = torch.cat([y1, y2, y3, y4], dim=1)
+            return self.relu(self.proj(cat) + self.shortcut(x))
+
+
+    class ECANet1D(nn.Module):
+        """
+        Efficient Channel Attention (ECA-Net) for 1D feature sequences:
+        Captures local cross-channel interaction without dimensionality reduction.
+        Parameter overhead: exactly 3 scalar weights.
+        """
+        def __init__(self, channels: int, kernel_size: int = 3):
+            super().__init__()
+            self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.conv = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, bias=False)
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            w = self.avg_pool(x).squeeze(-1).permute(0, 2, 1)  # (B, 1, C)
+            w = self.conv(w).permute(0, 2, 1).unsqueeze(-1)    # (B, C, 1, 1)
+            return x * self.sigmoid(w)
+
+
+    class LPRNetV3(nn.Module):
+        """
+        LPRNet-v3: Multi-Scale 1D-ASPP + ECA-Net Attention Backbone.
+        Input: (B, 3, 36, 160)
+        Output: (B, T=40, num_classes)
+        """
+        def __init__(self, num_classes: int = NUM_CLASSES, dropout_rate: float = 0.2):
+            super().__init__()
+            self.num_classes = num_classes
+
+            # Backbone Stem: 36x160 -> 18x80
+            self.stem = nn.Sequential(
+                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(kernel_size=3, stride=(2, 2), padding=1),  # (B, 64, 18, 80)
+            )
+
+            # Stage 1: 18x80 -> 18x80
+            self.block1 = SmallBasicBlock(64, 64, dilation_w=1)
+
+            # Downsample 1: 18x80 -> 9x40
+            self.pool1 = nn.MaxPool2d(kernel_size=3, stride=(2, 2), padding=1)
+
+            # Stage 2: 9x40 -> 9x40
+            self.block2 = SmallBasicBlock(64, 128, dilation_w=1)
+
+            # Stage 3: 9x40 -> 9x40 (Dilated d=2)
+            self.block3 = SmallBasicBlock(128, 256, dilation_w=2)
+
+            # Downsample 2: (Height down to 5, width preserved at 40)
+            self.pool2 = nn.MaxPool2d(kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))  # 5x40
+
+            # Stage 4: 1D-ASPP Block (Multi-scale receptive field)
+            self.block4 = ASPPBlock1D(256, 256)
+
+            # Downsample 3: collapse height to 1
+            self.pool3 = nn.AdaptiveAvgPool2d((1, 40))  # (B, 256, 1, 40)
+
+            # Global multi-scale projection
+            self.global_pool_stem = nn.AdaptiveAvgPool2d((1, 40))
+            self.global_pool_b2 = nn.AdaptiveAvgPool2d((1, 40))
+
+            # Total fused channels = 64 + 128 + 256 = 448
+            fused_channels = 64 + 128 + 256
+            self.eca = ECANet1D(fused_channels, kernel_size=3)
+
+            self.classifier = nn.Sequential(
+                nn.Dropout(dropout_rate),
+                nn.Conv2d(fused_channels, 256, kernel_size=1, bias=False),
+                nn.BatchNorm2d(256),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout_rate),
+                nn.Conv2d(256, num_classes, kernel_size=1),
+            )
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            f_stem = self.stem(x)         # (B, 64, 18, 80)
+            f_b1 = self.block1(f_stem)    # (B, 64, 18, 80)
+            f_p1 = self.pool1(f_b1)       # (B, 64, 9, 40)
+
+            f_b2 = self.block2(f_p1)      # (B, 128, 9, 40)
+            f_b3 = self.block3(f_b2)      # (B, 256, 9, 40)
+            f_p2 = self.pool2(f_b3)       # (B, 256, 5, 40)
+            f_b4 = self.block4(f_p2)      # (B, 256, 5, 40)
+            f_p3 = self.pool3(f_b4)       # (B, 256, 1, 40)
+
+            f_stem_proj = self.global_pool_stem(f_stem)  # (B, 64, 1, 40)
+            f_b2_proj = self.global_pool_b2(f_b2)        # (B, 128, 1, 40)
+
+            fused = torch.cat([f_stem_proj, f_b2_proj, f_p3], dim=1)  # (B, 448, 1, 40)
+            fused_att = self.eca(fused)                               # (B, 448, 1, 40)
+            out = self.classifier(fused_att)                          # (B, num_classes, 1, 40)
+            out = out.squeeze(2)                                      # (B, num_classes, 40)
+            out = out.permute(0, 2, 1)                                # (B, 40, num_classes)
+            return out
+
 except ImportError:
     torch = None
     nn = None
     LPRNet = None
+    LPRNet2D = None
+    LPRNetV3 = None
+    ASPPBlock1D = None
+    ECANet1D = None
 
 
 # ---------------------------------------------------------------------------
@@ -306,45 +520,150 @@ except ImportError:
 class PlateOCR:
     """
     High-level OCR wrapper supporting both PyTorch model and ONNX Runtime engine.
+    Also provides native 2D OCR (LPRNet2D) for Type 1A square plates without Split & Stitch seams.
     """
 
     def __init__(
         self,
         model_path: Optional[str] = None,
+        model_1a_path: Optional[str] = None,
         device: str = "cuda",
         use_onnx: bool = False,
+        ocr_version: str = "v2",
+        model_v2_path: Optional[str] = None,
+        model_v3_path: Optional[str] = None,
     ):
         self.device = device
         self.use_onnx = use_onnx
+        self.ocr_version = str(ocr_version).lower()
+        self.moe_mode = (self.ocr_version in ("auto", "moe"))
         self.decoder = CTCDecoder()
+
         self.model = None
         self.session = None
 
-        if model_path is not None and os.path.exists(model_path):
-            self.load(model_path)
+        self.model_1a = None
+        self.session_1a = None
+        self.model_1a_path = model_1a_path
 
-    def load(self, model_path: str) -> None:
+        self.model_v2 = None
+        self.session_v2 = None
+        self.model_v3 = None
+        self.session_v3 = None
+
+        if self.moe_mode:
+            v2_p = model_v2_path
+            if v2_p is None:
+                for cand in ["models/ocr_lprnet_best.onnx", "models/ocr_lprnet_v2.onnx", "models/ocr_lprnet_best.pt"]:
+                    if os.path.exists(cand):
+                        v2_p = cand
+                        break
+            v3_p = model_v3_path
+            if v3_p is None:
+                for cand in ["models/ocr_lprnet_v3.onnx", "models/ocr_lprnet_v3.pt"]:
+                    if os.path.exists(cand):
+                        v3_p = cand
+                        break
+            self.load_moe(v2_path=v2_p, v3_path=v3_p)
+        else:
+            if model_path is not None and os.path.exists(model_path):
+                is_v3 = (self.ocr_version == "v3" or "v3" in os.path.basename(model_path).lower())
+                self.load(model_path, is_v3=is_v3)
+
+        if self.model_1a_path is None:
+            # Auto-discover 1A model if present
+            default_1a = "models/ocr_lprnet_1a.onnx"
+            if os.path.exists(default_1a):
+                self.model_1a_path = default_1a
+
+        if self.model_1a_path is not None and os.path.exists(self.model_1a_path):
+            self.load_1a(self.model_1a_path)
+
+    def _create_engine(self, model_path: Optional[str], is_v3: bool = False):
+        """Helper to create an ONNX Runtime InferenceSession or PyTorch nn.Module."""
+        if model_path is None or not os.path.exists(model_path):
+            return None, None, False
         try:
             is_onnx = model_path.endswith(".onnx")
             if is_onnx:
                 import onnxruntime as ort
                 providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in self.device else ["CPUExecutionProvider"]
-                self.session = ort.InferenceSession(model_path, providers=providers)
-                self.use_onnx = True
+                session = ort.InferenceSession(model_path, providers=providers)
+                return session, None, True
             else:
                 if torch is None:
                     raise ImportError("PyTorch is required to load .pt checkpoint.")
-                self.model = LPRNet(num_classes=NUM_CLASSES)
+                arch_cls = LPRNetV3 if (is_v3 and LPRNetV3 is not None) else LPRNet
+                model = arch_cls(num_classes=NUM_CLASSES)
                 ckpt = torch.load(model_path, map_location=self.device)
                 state_dict = ckpt.get("state_dict", ckpt)
-                self.model.load_state_dict(state_dict)
-                self.model.to(self.device)
-                self.model.eval()
-                self.use_onnx = False
+                model.load_state_dict(state_dict)
+                model.to(self.device)
+                model.eval()
+                return None, model, False
         except Exception as e:
             print(f"[!] Warning: Failed to import/load inference engine for {model_path}: {e}")
-            self.session = None
-            self.model = None
+            return None, None, False
+
+    def load(self, model_path: str, is_v3: bool = False) -> None:
+        self.session, self.model, self.use_onnx = self._create_engine(model_path, is_v3=is_v3)
+
+    def load_moe(self, v2_path: Optional[str] = None, v3_path: Optional[str] = None) -> None:
+        """Loads both LPRNet-v2 and LPRNet-v3 engines for Type-Conditioned Routing (MoE)."""
+        self.session_v2, self.model_v2, onnx_v2 = self._create_engine(v2_path, is_v3=False)
+        self.session_v3, self.model_v3, onnx_v3 = self._create_engine(v3_path, is_v3=True)
+        # Primary fallback session/model (v2 preferred for general robustness)
+        self.session = self.session_v2 if self.session_v2 is not None else self.session_v3
+        self.model = self.model_v2 if self.model_v2 is not None else self.model_v3
+        self.use_onnx = onnx_v2 or onnx_v3
+
+    def _get_engine_for_type(self, plate_type: Optional[str] = None):
+        """
+        Type-Conditioned Routing (MoE):
+        - Type 1 (Civilian 1-line) -> LPRNet-v3 (1D-ASPP + ECA-Net)
+        - Type 1B (Yellow Buses) -> LPRNet-v2 (RF=61px Dilated)
+        - Type 2 (Trailers) & default -> LPRNet-v2
+        """
+        if not self.moe_mode:
+            return self.session, self.model
+        pt = str(plate_type).lower() if plate_type else "type1"
+        if pt == "type1":
+            if self.session_v3 is not None or self.model_v3 is not None:
+                return self.session_v3, self.model_v3
+        elif pt in ("type1b", "type2"):
+            if self.session_v2 is not None or self.model_v2 is not None:
+                return self.session_v2, self.model_v2
+        # Fallback priority: v2 -> v3 -> default session/model
+        if self.session_v2 is not None or self.model_v2 is not None:
+            return self.session_v2, self.model_v2
+        if self.session_v3 is not None or self.model_v3 is not None:
+            return self.session_v3, self.model_v3
+        return self.session, self.model
+
+    def load_1a(self, model_1a_path: str) -> None:
+        try:
+            is_onnx = model_1a_path.endswith(".onnx")
+            if is_onnx:
+                import onnxruntime as ort
+                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in self.device else ["CPUExecutionProvider"]
+                self.session_1a = ort.InferenceSession(model_1a_path, providers=providers)
+            else:
+                if torch is None or LPRNet2D is None:
+                    raise ImportError("PyTorch and LPRNet2D are required to load .pt checkpoint.")
+                self.model_1a = LPRNet2D(num_classes=NUM_CLASSES)
+                ckpt = torch.load(model_1a_path, map_location=self.device)
+                state_dict = ckpt.get("state_dict", ckpt)
+                self.model_1a.load_state_dict(state_dict)
+                self.model_1a.to(self.device)
+                self.model_1a.eval()
+        except Exception as e:
+            print(f"[!] Warning: Failed to load 1A OCR model from {model_1a_path}: {e}")
+            self.session_1a = None
+            self.model_1a = None
+
+    def has_1a_model(self) -> bool:
+        """Returns True if the native 2D Type 1A OCR engine is loaded."""
+        return self.session_1a is not None or self.model_1a is not None
 
 
     @staticmethod
@@ -434,19 +753,21 @@ class PlateOCR:
         # Activate adaptive CLAHE on dark or low-contrast plates
         is_dark_or_low_contrast = (mean_l < 50 and std_l < 15)
 
+        sess, mdl = self._get_engine_for_type(plate_type)
+
         if use_tta and is_dark_or_low_contrast:
             crop_clahe = self.apply_adaptive_clahe(crop_bgr)
             tensor_orig = self.preprocess(crop_bgr, apply_clahe=False)
             tensor_clahe = self.preprocess(crop_clahe, apply_clahe=False)
             tensor = np.concatenate([tensor_orig, tensor_clahe], axis=0)  # (2, 3, 36, 160)
 
-            if self.use_onnx and self.session is not None:
-                input_name = self.session.get_inputs()[0].name
-                logits_batch = self.session.run(None, {input_name: tensor})[0]  # (2, 40, num_classes)
-            elif self.model is not None:
+            if sess is not None:
+                input_name = sess.get_inputs()[0].name
+                logits_batch = sess.run(None, {input_name: tensor})[0]  # (2, 40, num_classes)
+            elif mdl is not None:
                 t = torch.from_numpy(tensor).to(self.device)
                 with torch.no_grad():
-                    logits_batch = self.model(t).cpu().numpy()
+                    logits_batch = mdl(t).cpu().numpy()
             else:
                 raise RuntimeError("OCR model is not loaded!")
 
@@ -476,13 +797,13 @@ class PlateOCR:
         else:
             tensor = self.preprocess(crop_bgr, apply_clahe=False)
 
-            if self.use_onnx and self.session is not None:
-                input_name = self.session.get_inputs()[0].name
-                logits = self.session.run(None, {input_name: tensor})[0]  # (1, 40, num_classes)
-            elif self.model is not None:
+            if sess is not None:
+                input_name = sess.get_inputs()[0].name
+                logits = sess.run(None, {input_name: tensor})[0]  # (1, 40, num_classes)
+            elif mdl is not None:
                 t = torch.from_numpy(tensor).to(self.device)
                 with torch.no_grad():
-                    logits = self.model(t).cpu().numpy()
+                    logits = mdl(t).cpu().numpy()
             else:
                 raise RuntimeError("OCR model is not loaded!")
             seq_logits = logits[0]  # (40, num_classes)
@@ -508,8 +829,9 @@ class PlateOCR:
         beam_width: int = 10,
     ) -> List[Union[Tuple[str, float], Tuple[str, float, str]]]:
         """
-        Runs batch OCR inference on N canonical crops simultaneously in a single forward pass [N, 3, 36, 160].
-        Greatly accelerates multi-plate images and batch benchmarks without looping.
+        Runs batch OCR inference on N canonical crops simultaneously.
+        In MoE mode, automatically partitions crops by expert (v3 for Type 1, v2 for Type 1B/2)
+        and executes efficient sub-batch forward passes.
         """
         if not crops_bgr:
             return []
@@ -523,34 +845,77 @@ class PlateOCR:
         tensors = []
         for crop in crops_bgr:
             tensors.append(self.preprocess(crop, apply_clahe=False))
-        batch_tensor = np.concatenate(tensors, axis=0)  # (N, 3, 36, 160)
 
-        if self.use_onnx and self.session is not None:
-            input_name = self.session.get_inputs()[0].name
-            logits_batch = self.session.run(None, {input_name: batch_tensor})[0]  # (N, 40, num_classes)
-        elif self.model is not None:
-            t = torch.from_numpy(batch_tensor).to(self.device)
-            with torch.no_grad():
-                logits_batch = self.model(t).cpu().numpy()
-        else:
-            raise RuntimeError("OCR model is not loaded!")
+        if not self.moe_mode:
+            batch_tensor = np.concatenate(tensors, axis=0)  # (N, 3, 36, 160)
 
-        results: List[Union[Tuple[str, float], Tuple[str, float, str]]] = []
-        for i in range(n):
-            seq_logits = logits_batch[i]
-            final_text, detected_type, confidence = self.decoder.score_hypotheses(
-                seq_logits,
-                plate_type_prior=p_types[i],
-                blank_idx=BLANK_IDX,
-                use_beam_search=use_beam_search,
-                beam_width=beam_width,
-            )
-            if return_type:
-                results.append((final_text, round(confidence, 4), detected_type))
+            if self.use_onnx and self.session is not None:
+                input_name = self.session.get_inputs()[0].name
+                logits_batch = self.session.run(None, {input_name: batch_tensor})[0]  # (N, 40, num_classes)
+            elif self.model is not None:
+                t = torch.from_numpy(batch_tensor).to(self.device)
+                with torch.no_grad():
+                    logits_batch = self.model(t).cpu().numpy()
             else:
-                results.append((final_text, round(confidence, 4)))
+                raise RuntimeError("OCR model is not loaded!")
 
-        return results
+            results: List[Union[Tuple[str, float], Tuple[str, float, str]]] = []
+            for i in range(n):
+                seq_logits = logits_batch[i]
+                final_text, detected_type, confidence = self.decoder.score_hypotheses(
+                    seq_logits,
+                    plate_type_prior=p_types[i],
+                    blank_idx=BLANK_IDX,
+                    use_beam_search=use_beam_search,
+                    beam_width=beam_width,
+                )
+                if return_type:
+                    results.append((final_text, round(confidence, 4), detected_type))
+                else:
+                    results.append((final_text, round(confidence, 4)))
+            return results
+
+        # MoE Mode: Group indices by specialized expert
+        groups: Dict[str, List[int]] = {}
+        for idx, pt in enumerate(p_types):
+            eng_key = "v3" if pt == "type1" and (self.session_v3 is not None or self.model_v3 is not None) else "v2"
+            groups.setdefault(eng_key, []).append(idx)
+
+        res_list: List[Optional[Union[Tuple[str, float], Tuple[str, float, str]]]] = [None] * n
+
+        for eng_key, group_indices in groups.items():
+            sess, mdl = (self.session_v3, self.model_v3) if eng_key == "v3" else (self.session_v2, self.model_v2)
+            if sess is None and mdl is None:
+                sess, mdl = self.session, self.model
+
+            sub_tensors = [tensors[i] for i in group_indices]
+            sub_batch = np.concatenate(sub_tensors, axis=0)
+
+            if sess is not None:
+                input_name = sess.get_inputs()[0].name
+                logits_batch = sess.run(None, {input_name: sub_batch})[0]
+            elif mdl is not None:
+                t = torch.from_numpy(sub_batch).to(self.device)
+                with torch.no_grad():
+                    logits_batch = mdl(t).cpu().numpy()
+            else:
+                raise RuntimeError(f"OCR model for expert '{eng_key}' is not loaded!")
+
+            for k, orig_idx in enumerate(group_indices):
+                seq_logits = logits_batch[k]
+                final_text, detected_type, confidence = self.decoder.score_hypotheses(
+                    seq_logits,
+                    plate_type_prior=p_types[orig_idx],
+                    blank_idx=BLANK_IDX,
+                    use_beam_search=use_beam_search,
+                    beam_width=beam_width,
+                )
+                if return_type:
+                    res_list[orig_idx] = (final_text, round(confidence, 4), detected_type)
+                else:
+                    res_list[orig_idx] = (final_text, round(confidence, 4))
+
+        return res_list
 
     def predict_type1a_dual(
         self,
@@ -558,7 +923,7 @@ class PlateOCR:
         bot_crop: np.ndarray,
         beam_width: int = 10,
     ) -> Tuple[str, float]:
-        """
+        r"""
         Dual-Line Pass OCR for Russian Type 1A square plates using already trained LPRNet:
         1. Resizes top line crop to (160, 36) and bot line crop to (160, 36).
         2. Inferences both in a single neural forward pass (batch size 2).
@@ -613,3 +978,128 @@ class PlateOCR:
         clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
         text = clean_top + clean_bot
         return text, 0.5000
+
+    def predict_type1a_native(
+        self,
+        crop_1a_bgr: np.ndarray,
+        use_beam_search: bool = True,
+        beam_width: int = 10,
+    ) -> Tuple[str, float]:
+        """
+        Native 2D OCR for Russian Type 1A square plates without Split & Stitch seams:
+        Accepts canonical (160x96) crop directly into 2D LPRNet architecture.
+        Decodes top line (steps 0..39) and bottom line (steps 40..79).
+        """
+        if not self.has_1a_model() or crop_1a_bgr is None or crop_1a_bgr.size == 0:
+            return "", 0.0
+
+        import cv2
+        h, w = crop_1a_bgr.shape[:2]
+        if (w, h) != (160, 96):
+            crop_1a_bgr = cv2.resize(crop_1a_bgr, (160, 96), interpolation=cv2.INTER_LINEAR)
+
+        rgb = cv2.cvtColor(crop_1a_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        tensor = np.transpose(rgb, (2, 0, 1))[np.newaxis, ...]  # (1, 3, 96, 160)
+
+        if self.session_1a is not None:
+            input_name = self.session_1a.get_inputs()[0].name
+            logits_batch = self.session_1a.run(None, {input_name: tensor})[0]  # (1, 80, num_classes)
+        elif self.model_1a is not None:
+            t = torch.from_numpy(tensor).to(self.device)
+            with torch.no_grad():
+                logits_batch = self.model_1a(t).cpu().numpy()
+        else:
+            return "", 0.0
+
+        logits = logits_batch[0]  # (80, num_classes)
+        top_logits = logits[:40]
+        bot_logits = logits[40:]
+
+        if use_beam_search:
+            dual_results = FSMBeamSearchDecoder.decode_fsm_type1a_dual(
+                top_logits,
+                bot_logits,
+                beam_width=beam_width,
+                blank_idx=BLANK_IDX,
+            )
+            if dual_results:
+                best_text, best_score = dual_results[0]
+                conf = float(np.clip(np.exp(min(0.0, best_score)), 0.05, 0.99))
+                return best_text, round(conf, 4)
+
+        # Fallback to greedy decoding
+        top_preds = np.argmax(top_logits, axis=-1)
+        bot_preds = np.argmax(bot_logits, axis=-1)
+        top_greedy = CTCDecoder.decode_greedy(top_preds, blank_idx=BLANK_IDX)
+        bot_greedy = CTCDecoder.decode_greedy(bot_preds, blank_idx=BLANK_IDX)
+        clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1")[:4]
+        clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
+        text = clean_top + clean_bot
+        return text, 0.5000
+
+    def predict_type1a_native_batch(
+        self,
+        crops_1a_bgr: Sequence[np.ndarray],
+        use_beam_search: bool = True,
+        beam_width: int = 10,
+    ) -> List[Tuple[str, float]]:
+        """
+        Runs batch native 2D OCR inference on N Type 1A canonical crops (160x96) simultaneously.
+        """
+        if not crops_1a_bgr:
+            return []
+        if not self.has_1a_model():
+            return [("", 0.0)] * len(crops_1a_bgr)
+
+        import cv2
+        tensors = []
+        for crop in crops_1a_bgr:
+            if crop is None or crop.size == 0:
+                tensors.append(np.zeros((1, 3, 96, 160), dtype=np.float32))
+                continue
+            h, w = crop.shape[:2]
+            if (w, h) != (160, 96):
+                crop = cv2.resize(crop, (160, 96), interpolation=cv2.INTER_LINEAR)
+            rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            tensors.append(np.transpose(rgb, (2, 0, 1))[np.newaxis, ...])
+
+        batch_tensor = np.concatenate(tensors, axis=0)  # (N, 3, 96, 160)
+
+        if self.session_1a is not None:
+            input_name = self.session_1a.get_inputs()[0].name
+            logits_batch = self.session_1a.run(None, {input_name: batch_tensor})[0]  # (N, 80, num_classes)
+        elif self.model_1a is not None:
+            t = torch.from_numpy(batch_tensor).to(self.device)
+            with torch.no_grad():
+                logits_batch = self.model_1a(t).cpu().numpy()
+        else:
+            return [("", 0.0)] * len(crops_1a_bgr)
+
+        results = []
+        for i in range(len(crops_1a_bgr)):
+            logits = logits_batch[i]
+            top_logits = logits[:40]
+            bot_logits = logits[40:]
+
+            if use_beam_search:
+                dual_results = FSMBeamSearchDecoder.decode_fsm_type1a_dual(
+                    top_logits,
+                    bot_logits,
+                    beam_width=beam_width,
+                    blank_idx=BLANK_IDX,
+                )
+                if dual_results:
+                    best_text, best_score = dual_results[0]
+                    conf = float(np.clip(np.exp(min(0.0, best_score)), 0.05, 0.99))
+                    results.append((best_text, round(conf, 4)))
+                    continue
+
+            top_preds = np.argmax(top_logits, axis=-1)
+            bot_preds = np.argmax(bot_logits, axis=-1)
+            top_greedy = CTCDecoder.decode_greedy(top_preds, blank_idx=BLANK_IDX)
+            bot_greedy = CTCDecoder.decode_greedy(bot_preds, blank_idx=BLANK_IDX)
+            clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1")[:4]
+            clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
+            results.append((clean_top + clean_bot, 0.5000))
+
+        return results

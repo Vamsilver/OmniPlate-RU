@@ -107,6 +107,8 @@ def run_inference(
     device: str = "cuda",
     conf_threshold: float = 0.12,
     iou_threshold: float = 0.45,
+    ocr_version: str = "v2",
+    ocr_model: Optional[str] = None,
     save_vis_dir: Optional[Path] = None,
     verbose: bool = False,
 ) -> Tuple[int, int, float]:
@@ -130,6 +132,8 @@ def run_inference(
     print(f"  Output CSV:  {output_csv}")
     print(f"  Device:      {device}")
     print(f"  Threshold:   conf={conf_threshold}, iou={iou_threshold}")
+    ocr_desc = "AUTO (MoE Routing: v3 Type1, v2 Type1B, 2D Type1A)" if ocr_version in ("auto", "moe") else (ocr_version.upper() if not ocr_model else "CUSTOM")
+    print(f"  OCR Version: {ocr_desc}")
     if save_vis_dir:
         print(f"  Visuals Dir: {save_vis_dir}")
         save_vis_dir.mkdir(parents=True, exist_ok=True)
@@ -137,13 +141,20 @@ def run_inference(
 
     # Initialize End-to-End Pipeline
     pipeline = OmniPlatePipeline(
+        ocr_path=ocr_model,
+        ocr_version=ocr_version,
         device=device,
         conf_threshold=conf_threshold,
         iou_threshold=iou_threshold,
     )
     print(f"[+] Active Pipeline on {pipeline.device}")
     print(f"    - Detector: {pipeline.detector_path}")
-    print(f"    - OCR:      {pipeline.ocr_path} (use_onnx={pipeline.use_onnx})")
+    if pipeline.ocr_version in ("auto", "moe"):
+        print(f"    - OCR (MoE): Type1 -> v3 ({pipeline.ocr_v3_path})")
+        print(f"                Type1B -> v2 ({pipeline.ocr_v2_path})")
+        print(f"                Type1A -> 2D ({pipeline.ocr_1a_path})")
+    else:
+        print(f"    - OCR:      {pipeline.ocr_path} (version={pipeline.ocr_version}, use_onnx={pipeline.use_onnx})")
 
     # Warmup
     print("[*] Warming up pipeline...")
@@ -268,6 +279,21 @@ def main():
         help="NMS IOU threshold",
     )
     parser.add_argument(
+        "--ocr_version", "--ocr-version",
+        dest="ocr_version",
+        type=str,
+        default="v2",
+        choices=["v2", "v3", "auto", "moe"],
+        help="OCR model version: 'v2' (dilated RF=61px, 1.13MB), 'v3' (1D-ASPP + ECA-Net, 1.81MB), or 'auto'/'moe' (Type-Conditioned Routing: v3 Type 1, v2 Type 1B, 2D Type 1A)",
+    )
+    parser.add_argument(
+        "--ocr_model", "--ocr-model",
+        dest="ocr_model",
+        type=str,
+        default=None,
+        help="Explicit path to OCR model weights (overrides --ocr_version)",
+    )
+    parser.add_argument(
         "--visualize", "--save_vis",
         dest="save_vis",
         type=str,
@@ -301,6 +327,8 @@ def main():
         device=resolved_device,
         conf_threshold=args.conf,
         iou_threshold=args.iou,
+        ocr_version=args.ocr_version,
+        ocr_model=args.ocr_model,
         save_vis_dir=vis_dir,
         verbose=args.verbose,
     )

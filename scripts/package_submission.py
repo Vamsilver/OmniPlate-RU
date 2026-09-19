@@ -40,7 +40,9 @@ MANIFEST_FILE = SUBMISSION_DIR / "SUBMISSION_MANIFEST.txt"
 REQUIRED_MODELS = [
     "models/detector_yolo_pose.onnx",
     "models/ocr_lprnet_best.onnx",
+    "models/ocr_lprnet_v3.onnx",
     "models/plate_verifier.onnx",
+    "models/ocr_lprnet_1a.onnx",
 ]
 
 CORE_FILES = [
@@ -49,6 +51,7 @@ CORE_FILES = [
     "README.md",
     "CONSTITUTION.md",
     "LICENSE",
+    "dataset_validation_report.txt",
     "docs/report/EXPLANATORY_NOTE.md",
     "docs/workflow/SUBMISSION_GUIDE.md",
     "scripts/validate_dataset.py",
@@ -92,7 +95,10 @@ def run_preflight_checks(skip_tests: bool = False):
     # 3. Run validation scripts
     if not skip_tests:
         print("\n[3/3] Running tests and dataset validation...")
-        python_bin = sys.executable
+        venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+        if not venv_python.exists():
+            venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
+        python_bin = str(venv_python) if venv_python.exists() else sys.executable
 
         # A. Dataset Validation
         print("  • Validating dataset (scripts/validate_dataset.py)...")
@@ -121,6 +127,7 @@ def run_preflight_checks(skip_tests: bool = False):
             print("  ❌ Pytest failed!")
             print(test_res.stdout)
             print(test_res.stderr)
+            sys.exit(1)
         import re
         m = re.search(r"(\d+) passed", test_res.stdout)
         count_str = f"{m.group(1)}/{m.group(1)}" if m else "49/49"
@@ -159,6 +166,8 @@ def package_solution():
         "detector_yolo_pose.onnx",
         "ocr_lprnet_best.onnx",
         "ocr_lprnet.onnx",
+        "ocr_lprnet_v3.onnx",
+        "ocr_lprnet_1a.onnx",
         "plate_verifier.onnx",
         "plate_verifier.onnx.data",
     }
@@ -174,6 +183,7 @@ def package_solution():
             "README.md",
             "CONSTITUTION.md",
             "LICENSE",
+            "dataset_validation_report.txt",
         ]:
             src_path = PROJECT_ROOT / rel_file
             if src_path.exists():
@@ -193,6 +203,10 @@ def package_solution():
                 for f in files:
                     file_path = Path(root) / f
                     rel_path = file_path.relative_to(PROJECT_ROOT)
+
+                    excluded_filenames = {"task_volga_it_2026.pdf"}
+                    if f in excluded_filenames:
+                        continue
 
                     # Model filter
                     if "models" in rel_path.parts:
@@ -242,12 +256,27 @@ def generate_manifest(zip_size_mb: float):
         sha = compute_sha256(mpath)
         manifest_lines.append(f"  {model_rel:<32} ({size_kb:8.1f} KB) SHA-256: {sha}")
 
+    meta_file = PROJECT_ROOT / "dataset" / "meta.csv"
+    total_rows = 0
+    synth_rows = 0
+    real_rows = 0
+    if meta_file.exists():
+        import csv
+        with open(meta_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter=";")
+            for r in reader:
+                total_rows += 1
+                if r.get("is_synthetic") == "1":
+                    synth_rows += 1
+                else:
+                    real_rows += 1
+
     manifest_lines.extend([
         "-" * 70,
         "DATASET METADATA:",
         f"  File:           dataset/meta.csv",
-        f"  Total Rows:     6492 (5000 Synthetic + 1492 Real)",
-        f"  SHA-256:        {compute_sha256(PROJECT_ROOT / 'dataset' / 'meta.csv')}",
+        f"  Total Rows:     {total_rows} ({synth_rows} Synthetic + {real_rows} Real)",
+        f"  SHA-256:        {compute_sha256(meta_file)}",
         "=" * 70,
     ])
 

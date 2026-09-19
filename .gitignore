@@ -56,8 +56,11 @@ models/*.bin
 !models/detector_yolo_pose.onnx
 !models/ocr_lprnet_best.onnx
 !models/ocr_lprnet.onnx
+!models/ocr_lprnet_1a.onnx
 !models/plate_verifier.onnx
 !models/plate_verifier.onnx.data
+models/*.onnx.data
+results.csv
 
 # YOLO / Training runs
 runs/

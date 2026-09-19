@@ -90,9 +90,19 @@ class TestType1ADualPass(unittest.TestCase):
         if text:
             self.assertIn(len(text), (8, 9))
 
+    def test_predict_type1a_native_interface(self):
+        """Tests predict_type1a_native with canonical 160x96 crop."""
+        dummy_crop = np.full((96, 160, 3), 220, dtype=np.uint8)
+        text, conf = self.ocr.predict_type1a_native(dummy_crop)
+        self.assertIsInstance(text, str)
+        self.assertIsInstance(conf, float)
+        self.assertTrue(0.0 <= conf <= 1.0)
+        if text:
+            self.assertIn(len(text), (8, 9))
+
     def test_pipeline_modes(self):
         """Tests that OmniPlatePipeline initializes and executes with all ocr_1a_mode options."""
-        for mode in ("dual", "stitch", "ensemble"):
+        for mode in ("native", "dual", "stitch", "ensemble"):
             p = OmniPlatePipeline(ocr_1a_mode=mode)
             self.assertEqual(p.ocr_1a_mode, mode)
             dummy_img = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -102,3 +112,4 @@ class TestType1ADualPass(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

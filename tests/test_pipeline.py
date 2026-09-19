@@ -413,6 +413,18 @@ class TestOmniPlatePipeline(unittest.TestCase):
         _ = self.pipeline.detect(img_720)
         self.assertEqual(captured_inputs[1], (720, 1280, 3))
 
+    def test_pipeline_moe_routing_mode(self):
+        """Tests that OmniPlatePipeline correctly configures MoE routing mode."""
+        pipe = OmniPlatePipeline(
+            detector_path="",
+            ocr_version="auto",
+            device="cpu",
+        )
+        self.assertEqual(pipe.ocr_version, "auto")
+        self.assertTrue(pipe.ocr.moe_mode)
+        self.assertIsNotNone(pipe.ocr_v2_path)
+        self.assertIsNotNone(pipe.ocr_v3_path)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -88,6 +88,7 @@ class OmniPlatePipeline:
         self,
         detector_path: Optional[str] = None,
         ocr_path: Optional[str] = None,
+        ocr_1a_path: Optional[str] = None,
         verifier_path: Optional[str] = None,
         device: str = "cuda",
         conf_threshold: float = 0.12,
@@ -95,6 +96,7 @@ class OmniPlatePipeline:
         imgsz: int = 640,
         use_onnx: bool = True,
         ocr_1a_mode: str = "ensemble",
+        ocr_version: str = "v2",
     ) -> None:
         self.device = self._resolve_device(device)
         self.conf_threshold = conf_threshold
@@ -102,6 +104,7 @@ class OmniPlatePipeline:
         self.imgsz = imgsz
         self.use_onnx = use_onnx
         self.ocr_1a_mode = ocr_1a_mode
+        self.ocr_version = str(ocr_version).lower()
 
         # Resolve model paths
         self.detector_path = self._resolve_model_path(
@@ -112,11 +115,49 @@ class OmniPlatePipeline:
                 "models/yolov8n_pose_best.pt",
             ],
         )
-        self.ocr_path = self._resolve_model_path(
-            ocr_path,
+        if self.ocr_version in ("auto", "moe"):
+            self.ocr_v2_path = self._resolve_model_path(
+                None,
+                candidates=[
+                    "models/ocr_lprnet_best.onnx",
+                    "models/ocr_lprnet_best.pt",
+                    "models/ocr_lprnet_v2.onnx",
+                ],
+                prefer_newest=True,
+            )
+            self.ocr_v3_path = self._resolve_model_path(
+                None,
+                candidates=[
+                    "models/ocr_lprnet_v3.onnx",
+                    "models/ocr_lprnet_v3.pt",
+                ],
+                prefer_newest=True,
+            )
+            self.ocr_path = self.ocr_v2_path
+        else:
+            self.ocr_v2_path = None
+            self.ocr_v3_path = None
+            ocr_candidates = (
+                [
+                    "models/ocr_lprnet_v3.onnx",
+                    "models/ocr_lprnet_v3.pt",
+                ]
+                if self.ocr_version == "v3"
+                else [
+                    "models/ocr_lprnet_best.pt",
+                    "models/ocr_lprnet_best.onnx",
+                ]
+            )
+            self.ocr_path = self._resolve_model_path(
+                ocr_path,
+                candidates=ocr_candidates,
+                prefer_newest=True,
+            )
+        self.ocr_1a_path = self._resolve_model_path(
+            ocr_1a_path,
             candidates=[
-                "models/ocr_lprnet_best.pt",
-                "models/ocr_lprnet_best.onnx",
+                "models/ocr_lprnet_1a.onnx",
+                "models/ocr_lprnet_1a_best.pt",
             ],
             prefer_newest=True,
         )
@@ -134,11 +175,17 @@ class OmniPlatePipeline:
 
         # Initialize neural sub-modules
         self.rectifier = PlateRectifier()
-        use_onnx = self.use_onnx and (self.ocr_path is not None and self.ocr_path.endswith(".onnx"))
+        use_onnx = self.use_onnx and (
+            (self.ocr_path is not None and self.ocr_path.endswith(".onnx")) or self.ocr_version in ("auto", "moe")
+        )
         self.ocr = PlateOCR(
             model_path=self.ocr_path,
+            model_1a_path=self.ocr_1a_path,
             device=self.device,
             use_onnx=use_onnx,
+            ocr_version=self.ocr_version,
+            model_v2_path=self.ocr_v2_path,
+            model_v3_path=self.ocr_v3_path,
         )
         self.detector = self._init_detector(self.detector_path)
         self.verifier = PlateVerifier(
@@ -580,6 +627,11 @@ class OmniPlatePipeline:
                 else:
                     # Colorimetric demotion guard: Background is gray/white (S < 60 or insufficient yellow).
                     # YOLO detector misclassified a white plate on a yellow car / warm light as type1b.
+                    if detection.confidence < 0.60:
+                        detection.plate_type = "other"
+                        detection.text = ""
+                        detection.ocr_confidence = 0.0
+                        return detection
                     ocr_res = self.ocr.predict_single(rectified, plate_type="type1", return_type=True)
                     if len(ocr_res) == 3:
                         text, ocr_conf, detected_type = ocr_res
@@ -591,18 +643,25 @@ class OmniPlatePipeline:
                     detection.plate_type = detected_type if detected_type in ("type1", "type2") else "type1"
 
             elif (plate_type == "type1a") or (effective_ar <= 2.10):
-                # Evaluate dual hypothesis (1A Stitched vs 1 Direct) to protect against
+                # Evaluate dual hypothesis (1A vs 1 Direct) to protect against
                 # perspective distortion turning 1-line into faux-square or vice versa.
-                # 1. Hypothesis A (Type 1A Stitched)
+                # 1. Hypothesis A (Type 1A)
                 rect_1a = self.rectifier.rectify(image, detection.quad, plate_type="type1a", margin=(0.020, 0.015), refine_corners=True)
                 h_1a = rect_1a.shape[0]
-                mid_1a = self.rectifier.find_adaptive_split_seam(rect_1a)
-                top_l = rect_1a[:mid_1a, :]
-                bot_l = rect_1a[mid_1a:, :]
-                if self.ocr_1a_mode == "dual" and hasattr(self.ocr, "predict_type1a_dual"):
+                has_native = hasattr(self.ocr, "predict_type1a_native") and getattr(self.ocr, "has_1a_model", lambda: False)()
+                has_dual = hasattr(self.ocr, "predict_type1a_dual")
+
+                if self.ocr_1a_mode == "native" and has_native:
+                    text_1a, conf_1a = self.ocr.predict_type1a_native(rect_1a)
+                elif self.ocr_1a_mode == "dual" and has_dual:
+                    mid_1a = self.rectifier.find_adaptive_split_seam(rect_1a)
+                    top_l = rect_1a[:mid_1a, :]
+                    bot_l = rect_1a[mid_1a:, :]
                     text_1a, conf_1a = self.ocr.predict_type1a_dual(top_l, bot_l)
-                    stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
-                elif self.ocr_1a_mode == "stitch" or not hasattr(self.ocr, "predict_type1a_dual"):
+                elif self.ocr_1a_mode == "stitch" or (not has_native and not has_dual):
+                    mid_1a = self.rectifier.find_adaptive_split_seam(rect_1a)
+                    top_l = rect_1a[:mid_1a, :]
+                    bot_l = rect_1a[mid_1a:, :]
                     stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
                     text_1a, conf_1a = self.ocr.predict_single(stitched_1a, plate_type="type1a")
 
@@ -616,19 +675,42 @@ class OmniPlatePipeline:
                                 score_curr = (1.0 if is_valid_gost_plate(text_1a, "type1a") else 0.0) * 5.0 - text_1a.count("#") * 3.0 + conf_1a * 3.0
                                 score_alt = (1.0 if is_valid_gost_plate(t_alt, "type1a") else 0.0) * 5.0 - t_alt.count("#") * 3.0 + c_alt * 3.0
                                 if score_alt > score_curr:
-                                    text_1a, conf_1a, stitched_1a = t_alt, c_alt, s_alt
+                                    text_1a, conf_1a = t_alt, c_alt
                 else:  # "ensemble"
-                    stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
-                    text_1a_ss, conf_1a_ss = self.ocr.predict_single(stitched_1a, plate_type="type1a")
-                    text_1a_dp, conf_1a_dp = self.ocr.predict_type1a_dual(top_l, bot_l)
-                    v_ss = is_valid_gost_plate(text_1a_ss, "type1a")
-                    v_dp = is_valid_gost_plate(text_1a_dp, "type1a")
-                    score_ss = conf_1a_ss * 10.0 - text_1a_ss.count("#") * 3.5 + (4.0 if v_ss else 0.0)
-                    score_dp = conf_1a_dp * 10.0 - text_1a_dp.count("#") * 3.5 + (4.0 if v_dp else 0.0) + 0.8
-                    if score_dp > score_ss:
-                        text_1a, conf_1a = text_1a_dp, conf_1a_dp
+                    if has_native and has_dual:
+                        text_1a_nat, conf_1a_nat = self.ocr.predict_type1a_native(rect_1a)
+                        mid_1a = self.rectifier.find_adaptive_split_seam(rect_1a)
+                        top_l = rect_1a[:mid_1a, :]
+                        bot_l = rect_1a[mid_1a:, :]
+                        text_1a_dp, conf_1a_dp = self.ocr.predict_type1a_dual(top_l, bot_l)
+                        v_nat = is_valid_gost_plate(text_1a_nat, "type1a")
+                        v_dp = is_valid_gost_plate(text_1a_dp, "type1a")
+                        score_nat = conf_1a_nat * 10.0 - text_1a_nat.count("#") * 3.5 + (4.0 if v_nat else 0.0) + 1.2
+                        score_dp = conf_1a_dp * 10.0 - text_1a_dp.count("#") * 3.5 + (4.0 if v_dp else 0.0)
+                        if score_nat >= score_dp:
+                            text_1a, conf_1a = text_1a_nat, conf_1a_nat
+                        else:
+                            text_1a, conf_1a = text_1a_dp, conf_1a_dp
+                    elif has_native:
+                        text_1a, conf_1a = self.ocr.predict_type1a_native(rect_1a)
                     else:
-                        text_1a, conf_1a = text_1a_ss, conf_1a_ss
+                        mid_1a = self.rectifier.find_adaptive_split_seam(rect_1a)
+                        top_l = rect_1a[:mid_1a, :]
+                        bot_l = rect_1a[mid_1a:, :]
+                        stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
+                        text_1a_ss, conf_1a_ss = self.ocr.predict_single(stitched_1a, plate_type="type1a")
+                        if has_dual:
+                            text_1a_dp, conf_1a_dp = self.ocr.predict_type1a_dual(top_l, bot_l)
+                            v_ss = is_valid_gost_plate(text_1a_ss, "type1a")
+                            v_dp = is_valid_gost_plate(text_1a_dp, "type1a")
+                            score_ss = conf_1a_ss * 10.0 - text_1a_ss.count("#") * 3.5 + (4.0 if v_ss else 0.0)
+                            score_dp = conf_1a_dp * 10.0 - text_1a_dp.count("#") * 3.5 + (4.0 if v_dp else 0.0) + 0.8
+                            if score_dp > score_ss:
+                                text_1a, conf_1a = text_1a_dp, conf_1a_dp
+                            else:
+                                text_1a, conf_1a = text_1a_ss, conf_1a_ss
+                        else:
+                            text_1a, conf_1a = text_1a_ss, conf_1a_ss
 
                 # 2. Hypothesis B (Type 1 Direct)
                 do_refine_1 = (bh >= 22)
@@ -754,14 +836,25 @@ class OmniPlatePipeline:
                     if detection.is_soft_fallback and (p_score < 0.60 or detection.ocr_confidence < 0.70):
                         is_non_plate = True
 
+                    # Foreign blue plate guard: reject foreign blue plates misidentified as Type 1
+                    if v_crop is not None:
+                        b_mean, g_mean, r_mean = [float(v) for v in v_crop.mean(axis=(0, 1))]
+                        if b_mean - r_mean > 45.0 and b_mean - g_mean > 30.0 and detection.confidence < 0.60:
+                            is_non_plate = True
+
                     # Joint confidence guard: prevent low-confidence background hallucination
-                    is_high_conf_gost = is_gost_strict and detection.ocr_confidence >= 0.85 and (detection.confidence * detection.ocr_confidence) >= 0.08 and detection.confidence >= 0.10
+                    is_high_conf_gost = (
+                        is_gost_strict
+                        and detection.ocr_confidence >= 0.90
+                        and (detection.confidence * detection.ocr_confidence) >= 0.18
+                        and detection.confidence >= 0.15
+                    )
                     if not is_high_conf_gost:
                         if (
                             detection.confidence < 0.10
                             or (detection.confidence < 0.25 and detection.ocr_confidence < 0.65)
                             or (detection.confidence < 0.40 and detection.ocr_confidence < 0.70)
-                            or (detection.confidence < 0.50 and detection.ocr_confidence < 0.55)
+                            or (detection.confidence < 0.50 and detection.ocr_confidence < 0.88)
                             or (detection.confidence * detection.ocr_confidence) < 0.18
                             or detection.ocr_confidence < 0.35
                         ):
@@ -813,6 +906,10 @@ class OmniPlatePipeline:
         crops_to_ocr = []
         types_to_ocr = []
 
+        valid_1a_entries = []
+        crops_1a_to_ocr = []
+        crops_1a_to_verify = []
+
         for idx, det in enumerate(detections):
             if det.plate_type == "other":
                 det.text = ""
@@ -832,11 +929,18 @@ class OmniPlatePipeline:
                 if is_square:
                     rectified = self.rectifier.rectify(image, det.quad, plate_type="type1a", margin=(0.015, 0.010), refine_corners=False)
                     det.rectified_crop = rectified
-                    top_line, bot_line = self.rectifier.split_type1a(rectified)
-                    stitched = self.rectifier.stitch_type1a_horizontal(top_line, bot_line, target_size=(160, 36))
-                    crops_to_ocr.append(stitched)
-                    types_to_ocr.append("type1a")
-                    valid_entries.append((idx, "type1a", rectified))
+                    if hasattr(self.ocr, "predict_type1a_native") and getattr(self.ocr, "has_1a_model", lambda: False)():
+                        crops_1a_to_ocr.append(rectified)
+                        valid_1a_entries.append((idx, "type1a", rectified))
+                        top_line, bot_line = self.rectifier.split_type1a(rectified)
+                        stitched = self.rectifier.stitch_type1a_horizontal(top_line, bot_line, target_size=(160, 36))
+                        crops_1a_to_verify.append(stitched)
+                    else:
+                        top_line, bot_line = self.rectifier.split_type1a(rectified)
+                        stitched = self.rectifier.stitch_type1a_horizontal(top_line, bot_line, target_size=(160, 36))
+                        crops_to_ocr.append(stitched)
+                        types_to_ocr.append("type1a")
+                        valid_entries.append((idx, "type1a", rectified))
                 elif det.plate_type == "type1b":
                     rectified = self.rectifier.rectify(image, det.quad, plate_type="type1b", margin=(0.020, 0.015), refine_corners=True)
                     det.rectified_crop = rectified
@@ -855,11 +959,13 @@ class OmniPlatePipeline:
                 det.text = ""
                 det.ocr_confidence = 0.0
 
+        batch_results = []
+        verifier_results = []
+
         if crops_to_ocr:
             if hasattr(self.ocr, "predict_batch"):
                 batch_results = self.ocr.predict_batch(crops_to_ocr, types_to_ocr, return_type=True)
             else:
-                batch_results = []
                 for crop, pt in zip(crops_to_ocr, types_to_ocr):
                     r = self.ocr.predict_single(crop, plate_type=pt, return_type=True)
                     if len(r) == 3:
@@ -873,6 +979,18 @@ class OmniPlatePipeline:
             else:
                 verifier_results = [(True, 1.0)] * len(crops_to_ocr)
 
+        if crops_1a_to_ocr:
+            if hasattr(self.ocr, "predict_type1a_native_batch"):
+                res_1a = self.ocr.predict_type1a_native_batch(crops_1a_to_ocr)
+            else:
+                res_1a = [self.ocr.predict_type1a_native(c) for c in crops_1a_to_ocr]
+            batch_results.extend([(txt, conf, "type1a") for txt, conf in res_1a])
+            valid_entries.extend(valid_1a_entries)
+            if self.verifier.is_valid():
+                verifier_results.extend(self.verifier.verify_batch(crops_1a_to_verify))
+            else:
+                verifier_results.extend([(True, 1.0)] * len(crops_1a_to_ocr))
+        if valid_entries:
             import re
             for (idx, target_type, rect_crop), (text, conf, detected_type), (is_plate, p_score) in zip(valid_entries, batch_results, verifier_results):
                 det = detections[idx]
@@ -883,6 +1001,11 @@ class OmniPlatePipeline:
                     is_yellow, _, _ = self.is_gost_yellow_plate(rect_crop, s_threshold=60.0)
                     if is_yellow and not re.match(r"^[ABEKMHOPCTYX]\d{3}[ABEKMHOPCTYX]{2}\d{2,3}$", text):
                         det.plate_type = "type1b"
+                    elif not is_yellow and det.confidence < 0.60:
+                        det.plate_type = "other"
+                        det.text = ""
+                        det.ocr_confidence = 0.0
+                        continue
                     else:
                         det.plate_type = "type1"
                 elif target_type == "type1a":
@@ -924,14 +1047,25 @@ class OmniPlatePipeline:
                     if det.is_soft_fallback and (p_score < 0.60 or det.ocr_confidence < 0.70):
                         is_non_plate = True
 
+                    # Foreign blue plate guard: reject foreign blue plates misidentified as Type 1
+                    if rect_crop is not None:
+                        b_mean, g_mean, r_mean = [float(v) for v in rect_crop.mean(axis=(0, 1))]
+                        if b_mean - r_mean > 45.0 and b_mean - g_mean > 30.0 and det.confidence < 0.60:
+                            is_non_plate = True
+
                     # Joint confidence guard: prevent low-confidence background hallucination
-                    is_high_conf_gost = is_gost_strict and det.ocr_confidence >= 0.85 and (det.confidence * det.ocr_confidence) >= 0.08 and det.confidence >= 0.10
+                    is_high_conf_gost = (
+                        is_gost_strict
+                        and det.ocr_confidence >= 0.90
+                        and (det.confidence * det.ocr_confidence) >= 0.18
+                        and det.confidence >= 0.15
+                    )
                     if not is_high_conf_gost:
                         if (
                             det.confidence < 0.10
                             or (det.confidence < 0.25 and det.ocr_confidence < 0.65)
                             or (det.confidence < 0.40 and det.ocr_confidence < 0.70)
-                            or (det.confidence < 0.50 and det.ocr_confidence < 0.55)
+                            or (det.confidence < 0.50 and det.ocr_confidence < 0.88)
                             or (det.confidence * det.ocr_confidence) < 0.18
                             or det.ocr_confidence < 0.35
                         ):
@@ -981,7 +1115,88 @@ class OmniPlatePipeline:
             for det in detections:
                 self.recognize_single(img_bgr, det)
 
+        # Full-Image Direct Plate Fallback for pre-cropped input images:
+        # If no valid plate was recognized by YOLO-Pose detector, check if the input image itself
+        # is an isolated plate crop (e.g. cropped benchmark datasets without car scene context).
+        valid_dets = [d for d in detections if d.plate_type != "other" and d.text]
+        if not valid_dets and img_bgr is not None and img_bgr.size > 0:
+            fallback_det = self._try_full_image_crop_fallback(img_bgr)
+            if fallback_det is not None:
+                return [fallback_det]
+
         return detections
+
+    def _try_full_image_crop_fallback(self, image: np.ndarray) -> Optional[PlateDetection]:
+        """
+        Direct OCR fallback when the input image itself is a pre-cropped plate
+        (e.g., benchmark evaluation on cropped plate datasets where YOLO detector fails due to lack of vehicle context).
+        """
+        try:
+            h, w = image.shape[:2]
+            if h < 16 or w < 32 or max(h, w) > 1600:
+                return None
+
+            # Fast exit for blank/black dummy test images or uniform color fields
+            if np.max(image) < 15 or float(np.std(image)) < 5.0:
+                return None
+
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            ys, xs = (gray > 15).nonzero()
+            if len(ys) > 0 and (ys.max() - ys.min() > 15) and (xs.max() - xs.min() > 30):
+                y1, y2, x1, x2 = int(ys.min()), int(ys.max() + 1), int(xs.min()), int(xs.max() + 1)
+                active = image[y1:y2, x1:x2]
+                ah, aw = active.shape[:2]
+                bx, by, bw, bh = x1, y1, x2 - x1, y2 - y1
+            else:
+                active = image
+                ah, aw = h, w
+                bx, by, bw, bh = 0, 0, w, h
+
+            ar = aw / float(ah)
+            # Only trigger on valid plate proportions: single-line (1.7 - 6.5) or square (0.8 - 1.6)
+            if not ((1.7 <= ar <= 6.5) or (0.8 <= ar <= 1.6)):
+                return None
+
+            # Don't trigger on huge panoramic scenes
+            if aw >= 1000 and ah >= 700:
+                return None
+
+            import re
+            t1_re = re.compile(r"^[ABEKMHOPCTYX]\d{3}[ABEKMHOPCTYX]{2}\d{2,3}$")
+            t1b_re = re.compile(r"^[ABEKMHOPCTYX]{2}\d{3}\d{2,3}$")
+
+            # Try square plate if ar is square-like
+            if 0.8 <= ar <= 1.6 and hasattr(self.ocr, "predict_type1a_native"):
+                rect_1a = self.rectifier.rectify(active, [0, 0, aw, 0, aw, ah, 0, ah], plate_type="type1a", margin=(0.0, 0.0), refine_corners=False)
+                txt_1a, conf_1a = self.ocr.predict_type1a_native(rect_1a)
+                if conf_1a >= 0.70 and t1_re.match(txt_1a) and "#" not in txt_1a:
+                    return PlateDetection(
+                        bbox=(bx, by, bw, bh),
+                        quad=[float(bx), float(by), float(bx + bw), float(by), float(bx + bw), float(by + bh), float(bx), float(by + bh)],
+                        plate_type="type1a",
+                        confidence=conf_1a,
+                        text=txt_1a,
+                        ocr_confidence=conf_1a,
+                    )
+
+            # Try single-line OCR
+            rect_1 = cv2.resize(active, (160, 36), interpolation=cv2.INTER_LINEAR)
+            text_1, conf_1 = self.ocr.predict_single(rect_1, plate_type="type1")
+            if conf_1 >= 0.70 and (t1_re.match(text_1) or t1b_re.match(text_1)) and "#" not in text_1:
+                p_type = "type1b" if t1b_re.match(text_1) else "type1"
+                return PlateDetection(
+                    bbox=(bx, by, bw, bh),
+                    quad=[float(bx), float(by), float(bx + bw), float(by), float(bx + bw), float(by + bh), float(bx), float(by + bh)],
+                    plate_type=p_type,
+                    confidence=conf_1,
+                    text=text_1,
+                    ocr_confidence=conf_1,
+                )
+
+        except Exception:
+            pass
+
+        return None
 
     def predict_batch(
         self,

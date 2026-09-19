@@ -439,6 +439,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128, help="Batch size")
     parser.add_argument("--lr", type=float, default=2e-4, help="Max learning rate for OneCycleLR")
     parser.add_argument("--workers", type=int, default=0, help="Dataloader workers")
+    parser.add_argument("--resume-from", type=str, default="", help="Optional checkpoint path to resume from")
     parser.add_argument("--output-dir", type=str, default="models", help="Output directory for checkpoints")
     args = parser.parse_args()
 
@@ -477,9 +478,13 @@ def main():
 
     # Initialize LPRNet-v3 (1D-ASPP + ECA-Net)
     model = LPRNetV3(num_classes=NUM_CLASSES, dropout_rate=0.2).to(device)
+    best_acc = 0.0
 
-    # Smart warm-start from best existing checkpoint
-    init_ckpt = os.path.join(args.output_dir, "ocr_lprnet_best.pt")
+    # Smart warm-start from existing checkpoint or resume
+    init_ckpt = args.resume_from if args.resume_from else os.path.join(args.output_dir, "ocr_lprnet_v3.pt")
+    if not os.path.exists(init_ckpt):
+        init_ckpt = os.path.join(args.output_dir, "ocr_lprnet_best.pt")
+
     if os.path.exists(init_ckpt):
         try:
             ckpt = torch.load(init_ckpt, map_location=device)
@@ -491,7 +496,10 @@ def main():
                     model_st[k] = v
                     loaded += 1
             model.load_state_dict(model_st)
-            print(f"[+] Smart Warm-Start: Loaded {loaded}/{len(model_st)} parameter tensors from {init_ckpt} successfully!")
+            prev_acc = ckpt.get("seq_acc", 0.0)
+            if "ocr_lprnet_v3" in init_ckpt and prev_acc > 0.0:
+                best_acc = prev_acc
+            print(f"[+] Smart Warm-Start: Loaded {loaded}/{len(model_st)} parameter tensors from {init_ckpt} (prev acc: {best_acc:.2f}%)")
         except Exception as e:
             print(f"[!] Warning: Could not warm-start from checkpoint: {e}")
 
@@ -502,14 +510,13 @@ def main():
         optimizer,
         max_lr=args.lr,
         total_steps=total_steps,
-        pct_start=0.20,
+        pct_start=0.15,
         anneal_strategy="cos",
-        div_factor=8.0,
+        div_factor=6.0,
         final_div_factor=500.0,
     )
 
     os.makedirs(args.output_dir, exist_ok=True)
-    best_acc = 0.0
     best_ckpt_path = os.path.join(args.output_dir, "ocr_lprnet_v3.pt")
 
     for epoch in range(1, args.epochs + 1):

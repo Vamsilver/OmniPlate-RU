@@ -1,23 +1,25 @@
 ======================================================================
 OMNIPLATE-RU: SUBMISSION MANIFEST (VOLGA IT 2026)
 ======================================================================
-Generated: 2026-09-19 01:58:18
+Generated: 2026-09-19 16:09:49
 Target Competition: Volga IT 2026 (Semi-Final)
 Track: AI & Data Analysis (AIS Gorod)
 Repository: https://github.com/Vamsilver/OmniPlate-RU
 ----------------------------------------------------------------------
 ARCHIVE INFORMATION:
   File:           OmniPlate-RU_solution.zip
-  Size:           12.88 MB
-  SHA-256:        93a845b1f04d36e4aad170a8180d154c6e7c79b1748bef009a10d0a2667549d4
+  Size:           15.62 MB
+  SHA-256:        01bc798dafe2cb165b0e10bdf6f05cef2839c709787cb5c49114178a407ce4fa
 ----------------------------------------------------------------------
 MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):
   models/detector_yolo_pose.onnx   ( 12370.3 KB) SHA-256: cd016d886585f9c10f5e3ecb88152bbf313263c1f27b9f7e2a0b32a0ea2f2375
   models/ocr_lprnet_best.onnx      (  1134.0 KB) SHA-256: 572f377badeee18ac8e8db1b86abf8754a2b433c99d04c9195c1090cc5c8f3cd
+  models/ocr_lprnet_v3.onnx        (  1807.7 KB) SHA-256: deeee01840a16005cfcd8aae239a669c2117585a26c04d6eb17ca5e4399804db
   models/plate_verifier.onnx       (    30.8 KB) SHA-256: 94a90d6bba5597f58c910da23244d73fb181210c2e0ca173b4dfc9a41ee8bd15
+  models/ocr_lprnet_1a.onnx        (  1134.3 KB) SHA-256: 664d3398fa45437226684ee069afbc3ed2a181af2266890812242d31ed2b6917
 ----------------------------------------------------------------------
 DATASET METADATA:
   File:           dataset/meta.csv
-  Total Rows:     6492 (5000 Synthetic + 1492 Real)
-  SHA-256:        ff19cca331da807ac177bbbd71a26dc8a4e02cbbe5492ba129f327e48905d943
+  Total Rows:     6518 (5000 Synthetic + 1518 Real)
+  SHA-256:        30faf0f8d0fb7dd5de7d37fbdaa7faa5cc87eb746c2473bf011b91ee645eec39
 ======================================================================

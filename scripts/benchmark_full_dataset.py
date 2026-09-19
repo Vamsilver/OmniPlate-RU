@@ -115,6 +115,7 @@ def run_benchmark(
     device: str = "cuda",
     conf_threshold: float = 0.12,
     max_samples: Optional[int] = None,
+    ocr_version: str = "moe",
 ):
     dataset_dir = os.path.abspath(dataset_dir)
     output_dir = os.path.abspath(output_dir)
@@ -143,8 +144,10 @@ def run_benchmark(
     print(f"[*] Loaded {len(real_rows)} real images from meta.csv")
 
     # 2. Initialize pipeline
-    print(f"[*] Initializing OmniPlatePipeline on device '{device}'...")
-    pipeline = OmniPlatePipeline(device=device, conf_threshold=conf_threshold)
+    print(f"[*] Initializing OmniPlatePipeline on device '{device}' (ocr_version='{ocr_version}')...")
+    pipeline = OmniPlatePipeline(device=device, conf_threshold=conf_threshold, ocr_version=ocr_version)
+    print("[*] Warming up pipeline...")
+    pipeline.warmup(iterations=2)
 
     # 3. Track metrics by class
     classes = ["type1", "type1a", "type1b", "other"]
@@ -237,7 +240,7 @@ def run_benchmark(
 
     # 4. Compile summary report
     print("\n" + "=" * 65)
-    print("🏆 FINAL END-TO-END BENCHMARK RESULTS (1,504 Real Images)")
+    print(f"🏆 FINAL END-TO-END BENCHMARK RESULTS ({len(real_rows)} Real Images)")
     print("=" * 65)
 
     results_table = {}
@@ -305,6 +308,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--conf", type=float, default=0.12)
     parser.add_argument("--max_samples", type=int, default=None)
+    parser.add_argument("--ocr_version", type=str, default="moe", choices=["v2", "v3", "moe", "auto"])
     args = parser.parse_args()
 
-    run_benchmark(args.dataset_dir, args.output_dir, args.device, args.conf, args.max_samples)
+    run_benchmark(args.dataset_dir, args.output_dir, args.device, args.conf, args.max_samples, args.ocr_version)

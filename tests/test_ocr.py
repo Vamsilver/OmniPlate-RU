@@ -280,6 +280,38 @@ class TestPlateOCR(unittest.TestCase):
             self.assertGreater(prior["C"].get("O", 0.0), 0.0)
 
 
+    def test_plate_ocr_moe_routing(self):
+        """Validates Type-Conditioned Routing (MoE) engine resolution and execution."""
+        ocr = PlateOCR(ocr_version="auto", device="cpu")
+        self.assertTrue(ocr.moe_mode)
+        self.assertEqual(ocr.ocr_version, "auto")
+
+        # Check engine resolution
+        eng_t1_sess, eng_t1_mdl = ocr._get_engine_for_type("type1")
+        eng_t1b_sess, eng_t1b_mdl = ocr._get_engine_for_type("type1b")
+        eng_t2_sess, eng_t2_mdl = ocr._get_engine_for_type("type2")
+
+        if ocr.session_v3 is not None:
+            self.assertIs(eng_t1_sess, ocr.session_v3)
+        if ocr.session_v2 is not None:
+            self.assertIs(eng_t1b_sess, ocr.session_v2)
+            self.assertIs(eng_t2_sess, ocr.session_v2)
+
+        # Functional prediction check on synthetic crops
+        dummy_crop = np.zeros((36, 160, 3), dtype=np.uint8)
+        text_t1, conf_t1 = ocr.predict_single(dummy_crop, plate_type="type1")
+        text_t1b, conf_t1b = ocr.predict_single(dummy_crop, plate_type="type1b")
+        self.assertIsInstance(text_t1, str)
+        self.assertIsInstance(conf_t1, float)
+        self.assertIsInstance(text_t1b, str)
+        self.assertIsInstance(conf_t1b, float)
+
+        # Batch prediction with heterogeneous plate types
+        batch_res = ocr.predict_batch([dummy_crop, dummy_crop], plate_types=["type1", "type1b"], return_type=True)
+        self.assertEqual(len(batch_res), 2)
+        self.assertEqual(len(batch_res[0]), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
 
