@@ -52,7 +52,7 @@
 Команда отказалась от медленных и громоздких двухстадийных каскадов (BBox-детектор + Segmenter + Transformer OCR) в пользу высокоскоростного компактного конвейера **OmniPlate-RU Pipeline**:
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["Входной кадр (1080p / 720p)"] --> B["YOLOv8n-pose (ONNX FP16)<br/>BBox + Quad (4 угла) + Класс"]
     B --> C["Геометрический фильтр<br/>Aspect Ratio and Convexity"]
     C --> D["PlateRectifier + Subpixel<br/>Гомография 3x3"]

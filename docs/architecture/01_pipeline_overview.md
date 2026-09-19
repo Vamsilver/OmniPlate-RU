@@ -5,7 +5,7 @@
 Для выполнения жесткого требования к задержке ($\le 100\text{ мс}$) на GPU GTX 1050 Ti и качественного распознавания под углами выбран модульный двухэтапный пайплайн с перспективным выпрямлением (**Detection $\to$ Rectification $\to$ Classification & Recognition**).
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["Входное изображение"] --> B["Этап 1: Детектор YOLOv8-pose"]
     B -->|"BBox + 4 угла quad + класс"| C{"Класс = other?"}
     C -->|"Да (other)"| D["Запись other в CSV без OCR"]

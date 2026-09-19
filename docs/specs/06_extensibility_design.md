@@ -16,7 +16,7 @@ MODULARITY_AXES:
 Решение OmniPlate-RU построено по принципу **слабосвязанных модулей (Decoupled Micro-Pipeline)**, что позволяет масштабировать его на новые форматы без переписывания кодовой базы:
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["YOLO-Pose: 4 Quad Corners"] --> B{"Aspect Ratio and Geometry Registry"}
     B -->|"Ratio ~4.6:1"| C["Single-Line OCR Branch"]
     B -->|"Ratio ~1.7:1"| D["Split and Stitch 2-Line Branch"]
