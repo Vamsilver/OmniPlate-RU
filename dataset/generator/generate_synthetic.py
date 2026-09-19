@@ -142,7 +142,7 @@ def generate_single_sample(args_tuple: Tuple) -> Tuple[int, List]:
 
     quad_str = " ".join(f"{v:.6f}" for v in norm_quad)
     with open(label_full_path, "w", encoding="utf-8") as lf:
-        lf.write(f"{class_id} {x_center:.6f} {y_center:.6f} {norm_w:.6f} {norm_h:.6f} {quad_str} {plate_num}\n")
+        lf.write(f"{class_id} {x_center:.6f} {y_center:.6f} {norm_w:.6f} {norm_h:.6f} {quad_str}\n")
 
     # 8. Return metadata row
     bbox_str = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"

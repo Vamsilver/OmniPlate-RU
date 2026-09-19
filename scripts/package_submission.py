@@ -103,10 +103,12 @@ def run_preflight_checks(skip_tests: bool = False):
         # A. Dataset Validation
         print("  • Validating dataset (scripts/validate_dataset.py)...")
         val_res = subprocess.run(
-            [python_bin, str(PROJECT_ROOT / "scripts" / "validate_dataset.py")],
+            [python_bin, str(PROJECT_ROOT / "scripts" / "validate_dataset.py"), "dataset/"],
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if val_res.returncode != 0:
             print("  ❌ Dataset validation failed!")
@@ -122,6 +124,8 @@ def run_preflight_checks(skip_tests: bool = False):
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if test_res.returncode != 0:
             print("  ❌ Pytest failed!")

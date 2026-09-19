@@ -44,6 +44,8 @@ NUM_CLASSES = len(VOCAB)
 PLATE_REGEX = re.compile(r"^[ABEKMHOPCTYX#][\d#]{3}[ABEKMHOPCTYX#]{2}[\d#]{2,3}$")
 PLATE_TYPE2_REGEX = re.compile(r"^[ABEKMHOPCTYX#]{2}[\d#]{4}[\d#]{2,3}$")
 PLATE_TYPE1B_REGEX = re.compile(r"^[ABEKMHOPCTYX#]{2}[\d#]{3}[\d#]{2,3}$")
+PLATE_TYPE1A_TOP_REGEX = re.compile(r"^[ABEKMHOPCTYX#][\d#]{3}$")
+PLATE_TYPE1A_BOT_REGEX = re.compile(r"^[ABEKMHOPCTYX#]{2}[\d#]{2,3}$")
 VALID_3DIGIT_STARTS = {"1", "2", "7", "#"}
 
 # Confusion replacement maps
@@ -170,6 +172,23 @@ def is_valid_gost_plate(text: str, plate_type: str = "type1", allow_wildcards: b
         if not re.match(pattern, text):
             return False
         reg = text[6:]
+    elif norm_type == "type1a_top":
+        pattern = (
+            r"^[ABEKMHOPCTYX#][\d#]{3}$"
+            if allow_wildcards
+            else r"^[ABEKMHOPCTYX]\d{3}$"
+        )
+        return bool(re.match(pattern, text))
+    elif norm_type == "type1a_bot":
+        pattern = (
+            r"^[ABEKMHOPCTYX#]{2}[\d#]{2,3}$"
+            if allow_wildcards
+            else r"^[ABEKMHOPCTYX]{2}\d{2,3}$"
+        )
+        if not re.match(pattern, text):
+            return False
+        reg = text[2:]
+        return is_valid_region(reg, allow_wildcards=allow_wildcards)
     else:
         return False
 
@@ -1190,6 +1209,12 @@ class CTCDecoder:
             if norm_prior == "type1a":
                 cand_1a = cls.apply_gost_heuristics(r_txt, plate_type="type1")
                 candidates.append(("type1a", cand_1a))
+            elif norm_prior == "type1a_top":
+                cand_top = cls.apply_gost_heuristics(r_txt, plate_type="type1a_top")
+                candidates.append(("type1a_top", cand_top))
+            elif norm_prior == "type1a_bot":
+                cand_bot = cls.apply_gost_heuristics(r_txt, plate_type="type1a_bot")
+                candidates.append(("type1a_bot", cand_bot))
             elif norm_prior == "type1b":
                 cand_1b = cls.apply_gost_heuristics(r_txt, plate_type="type1b")
                 cand_1 = cls.apply_gost_heuristics(r_txt, plate_type="type1")
@@ -1298,7 +1323,12 @@ class CTCDecoder:
 
         for p_type, text in list(candidate_dict.keys()):
             # 1. Letter optical confusion
-            let_positions = (0, 4, 5) if p_type in ("type1", "type1a") else (0, 1)
+            if p_type == "type1a_top":
+                let_positions = (0,)
+            elif p_type in ("type1a_bot", "type1b", "type2", "trailer"):
+                let_positions = (0, 1)
+            else:
+                let_positions = (0, 4, 5)
             for pos in let_positions:
                 if pos < len(text):
                     c = text[pos]
@@ -1311,7 +1341,17 @@ class CTCDecoder:
                                 candidate_dict[key] = b_actual
 
             # 2. Region optical confusion
-            if len(text) >= 8:
+            if p_type == "type1a_bot" and len(text) in (4, 5):
+                reg_start = 2
+                for rpos in range(reg_start, len(text)):
+                    rc = text[rpos]
+                    for alt_rc, b_val in optical_digit_map.get(rc, []):
+                        alt_text = text[:rpos] + alt_rc + text[rpos + 1 :]
+                        if alt_text != text:
+                            key = (p_type, alt_text)
+                            if key not in candidate_dict or b_val > candidate_dict[key]:
+                                candidate_dict[key] = b_val
+            elif len(text) >= 8:
                 reg_start = 6 if p_type in ("type1", "type1a", "type2") else 5
                 for rpos in range(reg_start, len(text)):
                     rc = text[rpos]

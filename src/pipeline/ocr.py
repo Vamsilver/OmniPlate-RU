@@ -1023,8 +1023,8 @@ class PlateOCR:
         # Fallback to greedy if beam search returned empty
         top_greedy = CTCDecoder.decode_greedy(np.argmax(logits_batch[0], axis=-1))
         bot_greedy = CTCDecoder.decode_greedy(np.argmax(logits_batch[1], axis=-1))
-        clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1")[:4]
-        clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
+        clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1a_top")
+        clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1a_bot")
         text = clean_top + clean_bot
         return text, 0.5000
 
@@ -1081,8 +1081,8 @@ class PlateOCR:
         bot_preds = np.argmax(bot_logits, axis=-1)
         top_greedy = CTCDecoder.decode_greedy(top_preds, blank_idx=BLANK_IDX)
         bot_greedy = CTCDecoder.decode_greedy(bot_preds, blank_idx=BLANK_IDX)
-        clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1")[:4]
-        clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
+        clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1a_top")
+        clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1a_bot")
         text = clean_top + clean_bot
         return text, 0.5000
 
@@ -1147,8 +1147,8 @@ class PlateOCR:
             bot_preds = np.argmax(bot_logits, axis=-1)
             top_greedy = CTCDecoder.decode_greedy(top_preds, blank_idx=BLANK_IDX)
             bot_greedy = CTCDecoder.decode_greedy(bot_preds, blank_idx=BLANK_IDX)
-            clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1")[:4]
-            clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1")[:5]
+            clean_top = CTCDecoder.apply_gost_heuristics(top_greedy, plate_type="type1a_top")
+            clean_bot = CTCDecoder.apply_gost_heuristics(bot_greedy, plate_type="type1a_bot")
             results.append((clean_top + clean_bot, 0.5000))
 
         return results

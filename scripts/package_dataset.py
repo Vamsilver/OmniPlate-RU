@@ -85,10 +85,12 @@ def run_preflight_checks(skip_validation: bool = False):
         python_bin = str(venv_python) if venv_python.exists() else sys.executable
 
         val_res = subprocess.run(
-            [python_bin, str(PROJECT_ROOT / "scripts" / "validate_dataset.py")],
+            [python_bin, str(PROJECT_ROOT / "scripts" / "validate_dataset.py"), str(DATASET_DIR)],
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if val_res.returncode != 0:
             print("❌ Dataset validation failed!")
