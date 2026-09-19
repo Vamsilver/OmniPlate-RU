@@ -11,11 +11,23 @@ from false positive noise (car grilles, headlights, bumper seams, road textures,
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
+
+# Ensure PyTorch CUDA DLLs are found by ONNX Runtime on Windows
+if sys.platform == "win32":
+    torch_lib = Path(sys.prefix) / "Lib" / "site-packages" / "torch" / "lib"
+    if torch_lib.exists():
+        try:
+            os.add_dll_directory(str(torch_lib))
+        except Exception:
+            pass
+        if str(torch_lib) not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = str(torch_lib) + ";" + os.environ.get("PATH", "")
 
 try:
     import torch
@@ -110,12 +122,24 @@ class PlateVerifier:
 
         if model_path and os.path.exists(model_path):
             if model_path.endswith(".onnx") and ort is not None:
-                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in device.lower() else ["CPUExecutionProvider"]
+                opts = ort.SessionOptions()
+                opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                opts.enable_mem_pattern = True
+                opts.enable_cpu_mem_arena = True
+
+                cuda_opts = {
+                    "device_id": 0,
+                    "arena_extend_strategy": "kNextPowerOfTwo",
+                    "cudnn_conv_algo_search": "EXHAUSTIVE",
+                    "do_copy_in_default_stream": "1",
+                }
+                providers = [("CUDAExecutionProvider", cuda_opts), "CPUExecutionProvider"] if "cuda" in device.lower() else ["CPUExecutionProvider"]
                 try:
-                    self.session = ort.InferenceSession(model_path, providers=providers)
+                    self.session = ort.InferenceSession(model_path, sess_options=opts, providers=providers)
                     self.use_onnx = True
                 except Exception:
-                    self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+                    self.session = ort.InferenceSession(model_path, sess_options=opts, providers=["CPUExecutionProvider"])
                     self.use_onnx = True
             elif model_path.endswith(".pt") and torch is not None:
                 self.torch_model = PlateVerifierNet()

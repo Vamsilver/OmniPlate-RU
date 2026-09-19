@@ -26,7 +26,8 @@ from src.pipeline.pipeline import OmniPlatePipeline, PlateDetection
 
 class TestType1ADualPass(unittest.TestCase):
     def setUp(self):
-        self.ocr = PlateOCR(model_path="models/ocr_lprnet_best.pt", device="cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") != "-1" else "cpu")
+        mpath = "models/ocr_lprnet_best.onnx" if os.path.exists("models/ocr_lprnet_best.onnx") else "models/ocr_lprnet_best.pt"
+        self.ocr = PlateOCR(model_path=mpath, device="cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") != "-1" else "cpu")
 
     def test_fsm_masks_type1a(self):
         """Tests that FSM table strictly enforces length and letter/digit positions for Type 1A lines."""

@@ -97,6 +97,7 @@ class OmniPlatePipeline:
         use_onnx: bool = True,
         ocr_1a_mode: str = "ensemble",
         ocr_version: str = "v2",
+        enable_crop_fallback: bool = False,
     ) -> None:
         self.device = self._resolve_device(device)
         self.conf_threshold = conf_threshold
@@ -105,6 +106,7 @@ class OmniPlatePipeline:
         self.use_onnx = use_onnx
         self.ocr_1a_mode = ocr_1a_mode
         self.ocr_version = str(ocr_version).lower()
+        self.enable_crop_fallback = enable_crop_fallback
 
         # Resolve model paths
         self.detector_path = self._resolve_model_path(
@@ -412,33 +414,32 @@ class OmniPlatePipeline:
             det_w, det_h = iw, ih
             scale_x, scale_y = 1.0, 1.0
 
+        # Single-pass multi-threshold search: runs YOLO once at 0.07 and partitions candidates
+        # into primary (>= conf_threshold) and soft fallback (0.07 <= conf < conf_threshold).
+        # Eliminates redundant second forward pass on negative frames ('other') without losing sensitivity.
+        min_conf = 0.07 if self.conf_threshold > 0.09 else self.conf_threshold
         results = self.detector.predict(
             source=det_img,
             imgsz=self.imgsz,
-            conf=self.conf_threshold,
+            conf=min_conf,
             iou=self.iou_threshold,
             agnostic_nms=True,
             device=self.device,
             verbose=False,
         )
 
-        detections = self._parse_results(results[0] if results else None, det_w, det_h)
+        all_detections = self._parse_results(results[0] if results else None, det_w, det_h)
 
-        # Two-pass adaptive fallback for dark, distant, or high-angle real plates
-        if not detections and self.conf_threshold > 0.09:
-            results_soft = self.detector.predict(
-                source=det_img,
-                imgsz=self.imgsz,
-                conf=0.07,
-                iou=self.iou_threshold,
-                agnostic_nms=True,
-                device=self.device,
-                verbose=False,
-            )
-            detections = self._parse_results(results_soft[0] if results_soft else None, det_w, det_h)
-            if detections:
+        if self.conf_threshold > 0.09:
+            primary = [d for d in all_detections if d.confidence >= self.conf_threshold]
+            if primary:
+                detections = primary
+            else:
+                detections = all_detections
                 for d in detections:
                     d.is_soft_fallback = True
+        else:
+            detections = all_detections
 
         # Rescale detections back to original coordinate space if resized
         if scale_x != 1.0 or scale_y != 1.0:
@@ -712,71 +713,99 @@ class OmniPlatePipeline:
                         else:
                             text_1a, conf_1a = text_1a_ss, conf_1a_ss
 
-                # 2. Hypothesis B (Type 1 Direct)
-                do_refine_1 = (bh >= 22)
-                rect_1 = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.012, 0.006), refine_corners=do_refine_1)
-                ocr_res_1 = self.ocr.predict_single(rect_1, plate_type="type1", return_type=True)
+                # Early Exit for decisive Type 1A: on clearly square plates (AR <= 1.45),
+                # if Hypothesis A achieves high-confidence valid GOST with no wildcards,
+                # Hypothesis B (Type 1 Direct) cannot mathematically surpass it.
+                skip_hyp_b = (
+                    plate_type == "type1a"
+                    and effective_ar <= 1.45
+                    and is_valid_gost_plate(text_1a, "type1a")
+                    and conf_1a >= 0.88
+                    and "#" not in text_1a
+                )
 
-                if len(ocr_res_1) == 3:
-                    text_1, conf_1, type_1 = ocr_res_1
-                else:
-                    text_1, conf_1 = ocr_res_1[:2]
-                    type_1 = "type1"
-
-                # Score both hypotheses: penalize wildcards (#), reward valid GOST length & region
-                wc_1a = text_1a.count("#")
-                wc_1 = text_1.count("#")
-                v_1a_valid = is_valid_gost_plate(text_1a, "type1a")
-                v_1_valid = is_valid_gost_plate(text_1, "type1")
-
-                score_1a = conf_1a * 10.0 - (wc_1a * 3.5) + (3.0 if len(text_1a) in (8, 9) else -5.0) + (4.0 if v_1a_valid else 0.0)
-                score_1 = conf_1 * 10.0 - (wc_1 * 3.5) + (3.0 if len(text_1) in (8, 9) else -5.0) + (4.0 if v_1_valid else 0.0)
-
-                # Aspect ratio priors based on physics of GOST
-                if effective_ar <= 1.45:
-                    score_1a += 3.5
-                elif effective_ar <= 1.65:
-                    score_1a += 1.5
-                elif effective_ar >= 2.15:
-                    score_1 += 5.0
-                elif effective_ar >= 1.95:
-                    score_1 += 3.0
-
-                if plate_type == "type1a":
-                    score_1a += 2.0 * min(1.0, max(0.2, detection.confidence))
-                elif plate_type == "type1":
-                    score_1 += 1.5 * min(1.0, max(0.2, detection.confidence))
-
-                # Clear confidence dominance rule: if Type 1 has high confidence and clearly outperforms 1A
-                if v_1_valid and conf_1 >= 0.80 and (conf_1 - conf_1a >= 0.25):
-                    score_1 += 8.0
-                elif v_1a_valid and conf_1a >= 0.80 and (conf_1a - conf_1 >= 0.25):
-                    score_1a += 8.0
-                elif v_1_valid and conf_1 >= 0.70 and not v_1a_valid:
-                    score_1 += 4.0
-                elif v_1a_valid and conf_1a >= 0.70 and not v_1_valid:
-                    score_1a += 4.0
-
-                if score_1a >= score_1:
+                if skip_hyp_b:
                     detection.rectified_crop = rect_1a
                     detection.text = text_1a
                     detection.ocr_confidence = round(conf_1a, 4)
                     detection.plate_type = "type1a"
                     v_crop = rect_1a
                 else:
-                    detection.rectified_crop = rect_1
-                    if type_1 == "type1b" and not self.is_gost_yellow_plate(rect_1)[0]:
+                    # 2. Hypothesis B (Type 1 Direct)
+                    do_refine_1 = (bh >= 22)
+                    rect_1 = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.012, 0.006), refine_corners=do_refine_1)
+                    ocr_res_1 = self.ocr.predict_single(rect_1, plate_type="type1", return_type=True)
+
+                    if len(ocr_res_1) == 3:
+                        text_1, conf_1, type_1 = ocr_res_1
+                    else:
+                        text_1, conf_1 = ocr_res_1[:2]
                         type_1 = "type1"
-                    detection.text = text_1
-                    detection.ocr_confidence = round(conf_1, 4)
-                    detection.plate_type = type_1 if type_1 in ("type1", "type2", "type1b") else "type1"
-                    v_crop = rect_1
+
+                    # Score both hypotheses: penalize wildcards (#), reward valid GOST length & region
+                    wc_1a = text_1a.count("#")
+                    wc_1 = text_1.count("#")
+                    v_1a_valid = is_valid_gost_plate(text_1a, "type1a")
+                    v_1_valid = is_valid_gost_plate(text_1, "type1")
+
+                    score_1a = conf_1a * 10.0 - (wc_1a * 3.5) + (3.0 if len(text_1a) in (8, 9) else -5.0) + (4.0 if v_1a_valid else 0.0)
+                    score_1 = conf_1 * 10.0 - (wc_1 * 3.5) + (3.0 if len(text_1) in (8, 9) else -5.0) + (4.0 if v_1_valid else 0.0)
+
+                    # Aspect ratio priors based on physics of GOST
+                    if effective_ar <= 1.45:
+                        score_1a += 3.5
+                    elif effective_ar <= 1.65:
+                        score_1a += 1.5
+                    elif effective_ar >= 2.15:
+                        score_1 += 5.0
+                    elif effective_ar >= 1.95:
+                        score_1 += 3.0
+
+                    if plate_type == "type1a":
+                        score_1a += 2.0 * min(1.0, max(0.2, detection.confidence))
+                    elif plate_type == "type1":
+                        score_1 += 1.5 * min(1.0, max(0.2, detection.confidence))
+
+                    # Clear confidence dominance rule: if Type 1 has high confidence and clearly outperforms 1A
+                    if v_1_valid and conf_1 >= 0.80 and (conf_1 - conf_1a >= 0.25):
+                        score_1 += 8.0
+                    elif v_1a_valid and conf_1a >= 0.80 and (conf_1a - conf_1 >= 0.25):
+                        score_1a += 8.0
+                    elif v_1_valid and conf_1 >= 0.70 and not v_1a_valid:
+                        score_1 += 4.0
+                    elif v_1a_valid and conf_1a >= 0.70 and not v_1_valid:
+                        score_1a += 4.0
+
+                    if score_1a >= score_1:
+                        detection.rectified_crop = rect_1a
+                        detection.text = text_1a
+                        detection.ocr_confidence = round(conf_1a, 4)
+                        detection.plate_type = "type1a"
+                        v_crop = rect_1a
+                    else:
+                        detection.rectified_crop = rect_1
+                        if type_1 == "type1b" and not self.is_gost_yellow_plate(rect_1)[0]:
+                            type_1 = "type1"
+                        detection.text = text_1
+                        detection.ocr_confidence = round(conf_1, 4)
+                        detection.plate_type = type_1 if type_1 in ("type1", "type2", "type1b") else "type1"
+                        v_crop = rect_1
 
             else:
                 # Definite Type 1 Single-Line Plate (AR > 2.10)
                 do_refine = (bh >= 22)
                 rectified = self.rectifier.rectify(image, detection.quad, plate_type="type1", margin=(0.012, 0.006), refine_corners=do_refine)
                 detection.rectified_crop = rectified
+
+                # Early Exit for obvious background noise before OCR
+                if self.verifier.is_valid() and not detection.is_soft_fallback and detection.confidence < 0.35:
+                    _, p_early = self.verifier.verify_single(rectified)
+                    if p_early < 0.0005:
+                        detection.plate_type = "other"
+                        detection.text = ""
+                        detection.ocr_confidence = 0.0
+                        return detection
+
                 ocr_res = self.ocr.predict_single(rectified, plate_type="type1", return_type=True)
                 if len(ocr_res) == 3:
                     text, ocr_conf, detected_type = ocr_res
@@ -1116,10 +1145,10 @@ class OmniPlatePipeline:
                 self.recognize_single(img_bgr, det)
 
         # Full-Image Direct Plate Fallback for pre-cropped input images:
-        # If no valid plate was recognized by YOLO-Pose detector, check if the input image itself
+        # If enabled and no valid plate was recognized by YOLO-Pose detector, check if the input image itself
         # is an isolated plate crop (e.g. cropped benchmark datasets without car scene context).
         valid_dets = [d for d in detections if d.plate_type != "other" and d.text]
-        if not valid_dets and img_bgr is not None and img_bgr.size > 0:
+        if self.enable_crop_fallback and not valid_dets and img_bgr is not None and img_bgr.size > 0:
             fallback_det = self._try_full_image_crop_fallback(img_bgr)
             if fallback_det is not None:
                 return [fallback_det]
@@ -1160,6 +1189,12 @@ class OmniPlatePipeline:
             # Don't trigger on huge panoramic scenes
             if aw >= 1000 and ah >= 700:
                 return None
+
+            # PlateVerifier guard: candidate active region must be verified as a plate
+            if hasattr(self, "verifier") and self.verifier is not None and self.verifier.is_valid():
+                is_p, p_score = self.verifier.verify_single(active)
+                if not is_p or p_score < 0.40:
+                    return None
 
             import re
             t1_re = re.compile(r"^[ABEKMHOPCTYX]\d{3}[ABEKMHOPCTYX]{2}\d{2,3}$")

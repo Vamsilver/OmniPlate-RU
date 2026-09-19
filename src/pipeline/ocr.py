@@ -566,9 +566,28 @@ class PlateOCR:
                         break
             self.load_moe(v2_path=v2_p, v3_path=v3_p)
         else:
-            if model_path is not None and os.path.exists(model_path):
-                is_v3 = (self.ocr_version == "v3" or "v3" in os.path.basename(model_path).lower())
-                self.load(model_path, is_v3=is_v3)
+            resolved_path = model_path
+            if resolved_path is not None and not os.path.exists(resolved_path):
+                # Fallback discovery for ONNX weights in models/
+                base_cand = Path(resolved_path).stem
+                candidates = [
+                    resolved_path.replace(".pt", ".onnx"),
+                    f"models/{base_cand}.onnx",
+                    "models/ocr_lprnet_best.onnx",
+                    "models/ocr_lprnet.onnx",
+                ]
+                for cand in candidates:
+                    if os.path.exists(cand):
+                        resolved_path = cand
+                        break
+            if resolved_path is None:
+                for cand in ["models/ocr_lprnet_best.onnx", "models/ocr_lprnet.onnx", "models/ocr_lprnet_best.pt"]:
+                    if os.path.exists(cand):
+                        resolved_path = cand
+                        break
+            if resolved_path is not None and os.path.exists(resolved_path):
+                is_v3 = (self.ocr_version == "v3" or "v3" in os.path.basename(resolved_path).lower())
+                self.load(resolved_path, is_v3=is_v3)
 
         if self.model_1a_path is None:
             # Auto-discover 1A model if present
@@ -587,8 +606,23 @@ class PlateOCR:
             is_onnx = model_path.endswith(".onnx")
             if is_onnx:
                 import onnxruntime as ort
-                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in self.device else ["CPUExecutionProvider"]
-                session = ort.InferenceSession(model_path, providers=providers)
+                opts = ort.SessionOptions()
+                opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                opts.enable_mem_pattern = True
+                opts.enable_cpu_mem_arena = True
+
+                cuda_opts = {
+                    "device_id": 0,
+                    "arena_extend_strategy": "kNextPowerOfTwo",
+                    "cudnn_conv_algo_search": "EXHAUSTIVE",
+                    "do_copy_in_default_stream": "1",
+                }
+                providers = [("CUDAExecutionProvider", cuda_opts), "CPUExecutionProvider"] if "cuda" in self.device.lower() else ["CPUExecutionProvider"]
+                try:
+                    session = ort.InferenceSession(model_path, sess_options=opts, providers=providers)
+                except Exception:
+                    session = ort.InferenceSession(model_path, sess_options=opts, providers=["CPUExecutionProvider"])
                 return session, None, True
             else:
                 if torch is None:
@@ -645,8 +679,23 @@ class PlateOCR:
             is_onnx = model_1a_path.endswith(".onnx")
             if is_onnx:
                 import onnxruntime as ort
-                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "cuda" in self.device else ["CPUExecutionProvider"]
-                self.session_1a = ort.InferenceSession(model_1a_path, providers=providers)
+                opts = ort.SessionOptions()
+                opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                opts.enable_mem_pattern = True
+                opts.enable_cpu_mem_arena = True
+
+                cuda_opts = {
+                    "device_id": 0,
+                    "arena_extend_strategy": "kNextPowerOfTwo",
+                    "cudnn_conv_algo_search": "EXHAUSTIVE",
+                    "do_copy_in_default_stream": "1",
+                }
+                providers = [("CUDAExecutionProvider", cuda_opts), "CPUExecutionProvider"] if "cuda" in self.device.lower() else ["CPUExecutionProvider"]
+                try:
+                    self.session_1a = ort.InferenceSession(model_1a_path, sess_options=opts, providers=providers)
+                except Exception:
+                    self.session_1a = ort.InferenceSession(model_1a_path, sess_options=opts, providers=["CPUExecutionProvider"])
             else:
                 if torch is None or LPRNet2D is None:
                     raise ImportError("PyTorch and LPRNet2D are required to load .pt checkpoint.")

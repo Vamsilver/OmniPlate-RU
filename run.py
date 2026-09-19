@@ -25,7 +25,9 @@ os.environ["YOLO_OFFLINE"] = "1"
 os.environ["YOLO_SYNC"] = "0"
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from queue import Queue
+from threading import Thread
+from typing import Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -39,6 +41,42 @@ from src.pipeline.pipeline import OmniPlatePipeline, PlateDetection
 
 # Supported image extensions
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+
+
+class ImagePrefetchLoader:
+    """
+    Asynchronous Threaded Image Prefetcher for hiding disk I/O and JPEG decoding overhead.
+    Decodes the next N images in a background worker while the GPU processes current frames.
+    """
+    def __init__(self, file_paths: List[Path], max_prefetch: int = 4):
+        self.file_paths = file_paths
+        self.queue: Queue = Queue(maxsize=max_prefetch)
+        self.stopped = False
+        self.thread = Thread(target=self._worker, daemon=True)
+        self.thread.start()
+
+    def _worker(self):
+        for idx, path in enumerate(self.file_paths, start=1):
+            if self.stopped:
+                break
+            img = cv2.imread(str(path))
+            self.queue.put((idx, path, img))
+        self.queue.put((None, None, None))
+
+    def __iter__(self) -> Iterator[Tuple[int, Path, Optional[np.ndarray]]]:
+        while True:
+            idx, path, img = self.queue.get()
+            if path is None:
+                break
+            yield idx, path, img
+
+    def stop(self):
+        self.stopped = True
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+            except Exception:
+                break
 
 
 def collect_images(input_path: Path) -> List[Path]:
@@ -169,47 +207,50 @@ def run_inference(
         writer = csv.writer(f, delimiter=";")
         writer.writerow(["image", "plate_num", "plate_type", "confidence"])
 
-        for idx, img_file in enumerate(image_files, start=1):
-            img_bgr = cv2.imread(str(img_file))
-            if img_bgr is None:
-                if verbose:
-                    print(f"[-] [{idx}/{len(image_files)}] Failed to load: {img_file.name}")
-                continue
+        loader = ImagePrefetchLoader(image_files, max_prefetch=4)
+        try:
+            for idx, img_file, img_bgr in loader:
+                if img_bgr is None:
+                    if verbose:
+                        print(f"[-] [{idx}/{len(image_files)}] Failed to load: {img_file.name}")
+                    continue
 
-            t0 = time.perf_counter()
-            detections = pipeline.predict(img_bgr)
-            dur_ms = (time.perf_counter() - t0) * 1000.0
+                t0 = time.perf_counter()
+                detections = pipeline.predict(img_bgr)
+                dur_ms = (time.perf_counter() - t0) * 1000.0
 
-            if len(detections) > 1:
-                def det_sort_key(d: PlateDetection):
-                    is_target = 1 if d.plate_type in ("type1", "type1a", "type1b") else 0
-                    real_chars = len([c for c in (d.text or "") if c != "#"])
-                    return (is_target, real_chars > 0, real_chars, d.ocr_confidence, d.confidence)
-                detections = sorted(detections, key=det_sort_key, reverse=True)
+                if len(detections) > 1:
+                    def det_sort_key(d: PlateDetection):
+                        is_target = 1 if d.plate_type in ("type1", "type1a", "type1b") else 0
+                        real_chars = len([c for c in (d.text or "") if c != "#"])
+                        return (is_target, real_chars > 0, real_chars, d.ocr_confidence, d.confidence)
+                    detections = sorted(detections, key=det_sort_key, reverse=True)
 
-            for det in detections:
-                conf_val = round(det.confidence, 2)
-                # Strictly adhere to competition classes: type1, type1a, type1b, other
-                out_type = "other" if det.plate_type in ("type2", "other") else det.plate_type
-                raw_text = (det.text or "").strip().upper()
-                plate_text = raw_text if raw_text else ("" if out_type == "other" else "########")
+                for det in detections:
+                    conf_val = round(det.confidence, 2)
+                    # Strictly adhere to competition classes: type1, type1a, type1b, other
+                    out_type = "other" if det.plate_type in ("type2", "other") else det.plate_type
+                    raw_text = (det.text or "").strip().upper()
+                    plate_text = raw_text if raw_text else ("" if out_type == "other" else "########")
 
-                writer.writerow([
-                    img_file.name,
-                    plate_text,
-                    out_type,
-                    f"{conf_val:.2f}",
-                ])
-                total_detections += 1
+                    writer.writerow([
+                        img_file.name,
+                        plate_text,
+                        out_type,
+                        f"{conf_val:.2f}",
+                    ])
+                    total_detections += 1
 
-            if verbose or idx % 50 == 0 or idx == len(image_files):
-                found_str = f"{len(detections)} plate(s)" if detections else "0 plates"
-                print(f"[{idx:>4}/{len(image_files)}] {img_file.name:<30} -> {found_str:<12} ({dur_ms:5.1f} ms)")
+                if verbose or idx % 50 == 0 or idx == len(image_files):
+                    found_str = f"{len(detections)} plate(s)" if detections else "0 plates"
+                    print(f"[{idx:>4}/{len(image_files)}] {img_file.name:<30} -> {found_str:<12} ({dur_ms:5.1f} ms)")
 
-            # Optional visualization save
-            if save_vis_dir is not None and detections:
-                vis_img = annotate_image(img_bgr, detections)
-                cv2.imwrite(str(save_vis_dir / f"vis_{img_file.name}"), vis_img)
+                # Optional visualization save
+                if save_vis_dir is not None and detections:
+                    vis_img = annotate_image(img_bgr, detections)
+                    cv2.imwrite(str(save_vis_dir / f"vis_{img_file.name}"), vis_img)
+        finally:
+            loader.stop()
 
     total_time = time.perf_counter() - t_start
     avg_fps = len(image_files) / max(0.001, total_time)
