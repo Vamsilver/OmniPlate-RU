@@ -6,7 +6,9 @@
 Репозиторий решения задачи полуфинала олимпиады **Volga IT 2026** по дисциплине **«Искусственный интеллект и анализ данных»** (куратор: **АИС Город**).
 
 > **Автор решения:** **Васильев Роман Алексеевич** (индивидуальный участник / проект полностью выполнен одним человеком).  
-> **GitHub:** [@Vamsilver](https://github.com/Vamsilver) | **Репозиторий:** [OmniPlate-RU](https://github.com/Vamsilver/OmniPlate-RU)
+> **GitHub:** [@Vamsilver](https://github.com/Vamsilver) | **Репозиторий:** [OmniPlate-RU](https://github.com/Vamsilver/OmniPlate-RU)  
+> **📦 Полный архив датасета (959 МБ):** [Google Drive Скачать](https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing)  
+> **🚀 Пакет сдачи решения (15.6 МБ):** [submission/OmniPlate-RU_solution.zip](submission/OmniPlate-RU_solution.zip)
 
 ---
 
