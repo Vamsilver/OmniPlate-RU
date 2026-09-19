@@ -17,14 +17,14 @@ MODULARITY_AXES:
 
 ```mermaid
 flowchart LR
-    A[YOLO-Pose: 4 Quad Corners] --> B{Aspect Ratio & Geometry Registry}
-    B -->|Ratio ~4.6:1| C[Single-Line OCR Branch]
-    B -->|Ratio ~1.7:1| D[Split & Stitch 2-Line Branch]
-    B -->|Ratio ~1.3:1 (Мото/Трактор)| E[Square 2-Line Branch]
-    C --> F[Country Grammars: RU / BY / KZ / AM]
+    A["YOLO-Pose: 4 Quad Corners"] --> B{"Aspect Ratio and Geometry Registry"}
+    B -->|"Ratio ~4.6:1"| C["Single-Line OCR Branch"]
+    B -->|"Ratio ~1.7:1"| D["Split and Stitch 2-Line Branch"]
+    B -->|"Ratio ~1.3:1 (Мото / Трактор)"| E["Square 2-Line Branch"]
+    C --> F["Country Grammars: RU / BY / KZ / AM"]
     D --> F
     E --> F
-    F --> G[Validated Output]
+    F --> G["Validated Output"]
 ```
 
 ---

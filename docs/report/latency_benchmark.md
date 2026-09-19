@@ -48,7 +48,7 @@
 ## 4. Архитектурный баланс задержки (Pipeline Component Breakdown)
 
 ```mermaid
-pie title Доли задержки в конвейере (1080p)
+pie title "Доли задержки в конвейере 1080p"
     "YOLOv8n-pose Detector" : 18.4
     "OpenCV Rectifier Warp" : 2.29
     "LPRNet Conv-CTC OCR" : 16.0

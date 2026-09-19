@@ -4,6 +4,7 @@ OMNIPLATE-RU: SUBMISSION MANIFEST (VOLGA IT 2026)
 Generated:           2026-09-19 19:11:38
 Target Competition:  Volga IT 2026 (Semi-Final)
 Track:               AI & Data Analysis (AIS Gorod)
+Participant/Author:  Васильев Роман Алексеевич (соло-участник / 1 человек)
 Repository:          https://github.com/Vamsilver/OmniPlate-RU
 ----------------------------------------------------------------------
 ARCHIVES SUMMARY:

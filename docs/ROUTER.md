@@ -7,6 +7,7 @@
 ## ⚡ Ключевые проектные инварианты (Global Invariants)
 ```yaml
 TASK: "Recognition of Non-Standard Russian License Plates (Volga IT 2026 / AIS Gorod)"
+AUTHOR: "Васильев Роман Алексеевич (индивидуальный участник / 1 человек)"
 TARGET_CLASSES: [type1, type1a, type1b, other]
 MAX_LATENCY_PER_IMAGE: 100 ms
 REFERENCE_HARDWARE: "Intel Core i5-7600, NVIDIA GTX 1050 Ti (4GB VRAM), 16GB RAM"

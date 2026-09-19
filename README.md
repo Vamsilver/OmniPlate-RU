@@ -5,6 +5,9 @@
 
 Репозиторий решения задачи полуфинала олимпиады **Volga IT 2026** по дисциплине **«Искусственный интеллект и анализ данных»** (куратор: **АИС Город**).
 
+> **Автор решения:** **Васильев Роман Алексеевич** (индивидуальный участник / проект полностью выполнен одним человеком).  
+> **GitHub:** [@Vamsilver](https://github.com/Vamsilver) | **Репозиторий:** [OmniPlate-RU](https://github.com/Vamsilver/OmniPlate-RU)
+
 ---
 
 ## 🧭 Быстрая навигация по документации проекта
@@ -32,7 +35,7 @@
 ```mermaid
 flowchart TD
     A["Входной кадр (1080p / 720p / 4K)"] --> B["YOLOv8n-pose (ONNX FP16)<br/>BBox + 4 угла (Quad) + Класс"]
-    B --> C["Safety Max-Dim Guard<br/>& Subpixel Corner Refinement"]
+    B --> C["Safety Max-Dim Guard<br/>and Subpixel Corner Refinement"]
     C --> D["PlateRectifier<br/>Перспективная гомография 3x3"]
     
     D --> E{"Класс и геометрия пластины?"}
@@ -48,7 +51,7 @@ flowchart TD
         V -->|"Подтверждено"| R{"Роутер типа"}
         R -->|"Тип 1"| H1["LPRNet-v3 (1D-ASPP + ECA-Net)"]
         R -->|"Тип 1Б / Прицеп"| H2["LPRNet-v2 (RF 61px Dilated)"]
-        R -->|"Тип 1А (Квадрат)"| H3["2D Dual-Line Native LPRNet<br/>(Опц. арбитраж Split & Stitch)"]
+        R -->|"Тип 1А (Квадрат)"| H3["2D Dual-Line Native LPRNet<br/>(Опц. арбитраж Split and Stitch)"]
     end
     
     H1 --> I["FSM Beam Search Decoder<br/>Конечный автомат ГОСТ + Регионы РФ"]
@@ -223,3 +226,14 @@ VolgaIT/
 ├── requirements.txt            # Зависимости окружения
 └── run.py                      # Единая точка входа для жюри (100% OFFLINE CLI)
 ```
+
+---
+
+## 👤 Информация об авторе
+
+- **Автор решения:** Васильев Роман Алексеевич
+- **Формат участия:** Индивидуальный участник (команда проекта состоит из 1 человека)
+- **GitHub:** [https://github.com/Vamsilver](https://github.com/Vamsilver)
+- **Проект:** [OmniPlate-RU](https://github.com/Vamsilver/OmniPlate-RU)
+- **Олимпиада:** Volga IT 2026 (Полуфинал, дисциплина «Искусственный интеллект и анализ данных»)
+

@@ -305,7 +305,7 @@ def generate_markdown_report(
         "## 4. Архитектурный баланс задержки (Pipeline Component Breakdown)",
         "",
         "```mermaid",
-        "pie title Доли задержки в конвейере (1080p)",
+        'pie title "Доли задержки в конвейере 1080p"',
         f'    "YOLOv8n-pose Detector" : {max(0.1, fhd.get("det_mean_ms", 12.0)):.1f}',
         f'    "OpenCV Rectifier Warp" : {max(0.05, fhd.get("rect_mean_ms", 0.15)):.2f}',
         f'    "LPRNet Conv-CTC OCR" : {max(0.1, fhd.get("ocr_mean_ms", 2.5)):.1f}',

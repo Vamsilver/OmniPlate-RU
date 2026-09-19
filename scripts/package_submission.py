@@ -241,6 +241,7 @@ def generate_manifest(zip_size_mb: float):
         f"Generated:           {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"Target Competition:  Volga IT 2026 (Semi-Final)",
         f"Track:               AI & Data Analysis (AIS Gorod)",
+        f"Participant/Author:  Васильев Роман Алексеевич (соло-участник / 1 человек)",
         f"Repository:          https://github.com/Vamsilver/OmniPlate-RU",
         "-" * 70,
         "ARCHIVES SUMMARY:",
