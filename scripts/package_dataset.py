@@ -240,18 +240,18 @@ def update_manifest(dataset_size_mb: float, dataset_sha: str, dataset_files: int
     print("=" * 70)
 
     meta_file = DATASET_DIR / "meta.csv"
-    total_rows = 0
-    synth_rows = 0
-    real_rows = 0
+    real_by_type = {}
+    real_unique_plates = {}
     if meta_file.exists():
         with open(meta_file, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f, delimiter=";")
-            for r in reader:
-                total_rows += 1
-                if r.get("is_synthetic") == "1":
-                    synth_rows += 1
-                else:
-                    real_rows += 1
+            reader = list(csv.DictReader(f, delimiter=";"))
+            total_rows = len(reader)
+            synth_rows = sum(1 for r in reader if r.get("is_synthetic") == "1")
+            real_rows = sum(1 for r in reader if r.get("is_synthetic") == "0")
+            for t in ["type1", "type1a", "type1b", "other"]:
+                matching = [r for r in reader if r.get("is_synthetic") == "0" and r.get("plate_type") == t]
+                real_by_type[t] = len(matching)
+                real_unique_plates[t] = len(set(r["plate_num"] for r in matching if "#" not in r["plate_num"]))
 
     solution_size_mb = 0.0
     solution_sha = "N/A"
@@ -299,14 +299,23 @@ def update_manifest(dataset_size_mb: float, dataset_sha: str, dataset_files: int
             sha = compute_sha256(mpath)
             manifest_lines.append(f"  {model_rel:<32} ({size_kb:8.1f} KB) SHA-256: {sha}")
 
+    t1_r = real_by_type.get("type1", 0)
+    t1_u = real_unique_plates.get("type1", 0)
+    t1a_r = real_by_type.get("type1a", 0)
+    t1a_u = real_unique_plates.get("type1a", 0)
+    t1b_r = real_by_type.get("type1b", 0)
+    t1b_u = real_unique_plates.get("type1b", 0)
+    oth_r = real_by_type.get("other", 0)
+
     manifest_lines.extend([
         "-" * 70,
         "DATASET METADATA (100% VALIDATED):",
         f"  File:              dataset/meta.csv",
         f"  Total Rows:        {total_rows} ({synth_rows} Synthetic + {real_rows} Real)",
-        f"  Type 1A (Square):  318 Real (155 Unique, Quota >= 50)",
-        f"  Type 1B (Yellow):  306 Real (277 Unique, Quota >= 100)",
-        f"  Other (Negative):  251 Real (Quota >= 50, 0 Fatal Penalties)",
+        f"  Type 1 (Civil):    {t1_r} Real ({t1_u} Unique, Quota >= 100)",
+        f"  Type 1A (Square):  {t1a_r} Real ({t1a_u} Unique, Quota >= 50)",
+        f"  Type 1B (Yellow):  {t1b_r} Real ({t1b_u} Unique)",
+        f"  Other (Negative):  {oth_r} Real (Quota >= 50, 0 Fatal Penalties)",
         f"  SHA-256:           {compute_sha256(meta_file)}",
         "=" * 70,
     ])
@@ -330,6 +339,15 @@ def generate_submission_letter(dataset_size_mb: float, dataset_sha: str):
     if SOLUTION_ZIP.exists():
         solution_size_mb = SOLUTION_ZIP.stat().st_size / (1024 * 1024)
         solution_sha = compute_sha256(SOLUTION_ZIP)
+
+    meta_file = DATASET_DIR / "meta.csv"
+    total_rows, synth_rows, real_rows = 6760, 5000, 1760
+    if meta_file.exists():
+        with open(meta_file, "r", encoding="utf-8") as f:
+            reader = list(csv.DictReader(f, delimiter=";"))
+            total_rows = len(reader)
+            synth_rows = sum(1 for r in reader if r.get("is_synthetic") == "1")
+            real_rows = sum(1 for r in reader if r.get("is_synthetic") == "0")
 
     letter_text = f"""Уважаемые члены жюри и оргкомитета олимпиады Volga IT 2026!
 
@@ -356,7 +374,7 @@ def generate_submission_letter(dataset_size_mb: float, dataset_sha: str):
 1.3. Полный архив размеченного датасета:
      Файл:    OmniPlate-RU_dataset.zip ({dataset_size_mb:.2f} МБ)
      SHA-256: {dataset_sha}
-     Состав:  6 518 аннотаций (5 000 процедурная синтетика + 1 518 реальных дорожных кадров)
+     Состав:  {total_rows} аннотаций ({synth_rows} процедурная синтетика + {real_rows} реальных дорожных кадров)
      Ссылка на облачный диск (Google Drive):
      https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 

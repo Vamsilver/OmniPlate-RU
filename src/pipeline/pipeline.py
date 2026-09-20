@@ -431,11 +431,21 @@ class OmniPlatePipeline:
         all_detections = self._parse_results(results[0] if results else None, det_w, det_h)
 
         if self.conf_threshold > 0.09:
-            primary = [d for d in all_detections if d.confidence >= self.conf_threshold]
+            primary = []
+            fallback = []
+            for d in all_detections:
+                bx, by, bw, bh = d.bbox
+                ar = bw / float(bh) if bh > 0 else 1.0
+                is_square = (0.85 <= ar <= 1.85) or (d.plate_type == "type1a" and ar <= 2.10)
+                cand_thresh = min(self.conf_threshold, 0.085) if is_square else self.conf_threshold
+                if d.confidence >= cand_thresh:
+                    primary.append(d)
+                else:
+                    fallback.append(d)
             if primary:
                 detections = primary
             else:
-                detections = all_detections
+                detections = fallback
                 for d in detections:
                     d.is_soft_fallback = True
         else:
@@ -648,7 +658,7 @@ class OmniPlatePipeline:
                 # Evaluate dual hypothesis (1A vs 1 Direct) to protect against
                 # perspective distortion turning 1-line into faux-square or vice versa.
                 # 1. Hypothesis A (Type 1A)
-                rect_1a = self.rectifier.rectify(image, detection.quad, plate_type="type1a", margin=(0.020, 0.015), refine_corners=True)
+                rect_1a = self.rectifier.rectify(image, detection.quad, plate_type="type1a", margin=(0.020, 0.015), refine_corners=False)
                 h_1a = rect_1a.shape[0]
                 has_native = hasattr(self.ocr, "predict_type1a_native") and getattr(self.ocr, "has_1a_model", lambda: False)()
                 has_dual = hasattr(self.ocr, "predict_type1a_dual")
@@ -754,9 +764,9 @@ class OmniPlatePipeline:
 
                     # Aspect ratio priors based on physics of GOST
                     if effective_ar <= 1.45:
+                        score_1a += 4.0
+                    elif effective_ar <= 1.75:
                         score_1a += 3.5
-                    elif effective_ar <= 1.65:
-                        score_1a += 1.5
                     elif effective_ar >= 2.15:
                         score_1 += 5.0
                     elif effective_ar >= 1.95:
@@ -880,22 +890,30 @@ class OmniPlatePipeline:
                             is_non_plate = True
 
                     # Joint confidence guard: prevent low-confidence background hallucination
+                    is_confident_gost = (
+                        is_gost_strict
+                        and (is_plate or p_score >= 0.50)
+                        and detection.ocr_confidence >= 0.60
+                    )
                     is_high_conf_gost = (
                         is_gost_strict
-                        and detection.ocr_confidence >= 0.90
-                        and (detection.confidence * detection.ocr_confidence) >= 0.18
-                        and detection.confidence >= 0.15
+                        and (is_plate or p_score >= 0.50)
+                        and detection.ocr_confidence >= 0.85
+                        and (detection.confidence * detection.ocr_confidence) >= 0.08
+                        and detection.confidence >= 0.08
                     )
-                    if is_high_conf_gost and detection.plate_type == "type1a":
+                    if (is_confident_gost or is_high_conf_gost) and detection.plate_type == "type1a":
                         is_non_plate = False
-                    if not is_high_conf_gost:
+                    elif (is_confident_gost or is_high_conf_gost) and detection.plate_type in ("type1", "type1b"):
+                        is_non_plate = False
+                    if not (is_confident_gost or is_high_conf_gost):
                         if (
-                            detection.confidence < 0.10
-                            or (detection.confidence < 0.25 and detection.ocr_confidence < 0.65)
-                            or (detection.confidence < 0.40 and detection.ocr_confidence < 0.70)
-                            or (detection.confidence < 0.50 and detection.ocr_confidence < 0.88)
-                            or (detection.confidence * detection.ocr_confidence) < 0.18
-                            or detection.ocr_confidence < 0.35
+                            detection.confidence < 0.08
+                            or (detection.confidence < 0.20 and detection.ocr_confidence < 0.55)
+                            or (detection.confidence < 0.35 and detection.ocr_confidence < 0.60)
+                            or (detection.confidence < 0.45 and detection.ocr_confidence < 0.75)
+                            or (detection.confidence * detection.ocr_confidence) < 0.08
+                            or detection.ocr_confidence < 0.30
                         ):
                             is_non_plate = True
 
@@ -1106,22 +1124,30 @@ class OmniPlatePipeline:
                             is_non_plate = True
 
                     # Joint confidence guard: prevent low-confidence background hallucination
+                    is_confident_gost = (
+                        is_gost_strict
+                        and (is_plate or p_score >= 0.50)
+                        and det.ocr_confidence >= 0.60
+                    )
                     is_high_conf_gost = (
                         is_gost_strict
-                        and det.ocr_confidence >= 0.90
-                        and (det.confidence * det.ocr_confidence) >= 0.18
-                        and det.confidence >= 0.15
+                        and (is_plate or p_score >= 0.50)
+                        and det.ocr_confidence >= 0.85
+                        and (det.confidence * det.ocr_confidence) >= 0.08
+                        and det.confidence >= 0.08
                     )
-                    if is_high_conf_gost and det.plate_type == "type1a":
+                    if (is_confident_gost or is_high_conf_gost) and det.plate_type == "type1a":
                         is_non_plate = False
-                    if not is_high_conf_gost:
+                    elif (is_confident_gost or is_high_conf_gost) and det.plate_type in ("type1", "type1b"):
+                        is_non_plate = False
+                    if not (is_confident_gost or is_high_conf_gost):
                         if (
-                            det.confidence < 0.10
-                            or (det.confidence < 0.25 and det.ocr_confidence < 0.65)
-                            or (det.confidence < 0.40 and det.ocr_confidence < 0.70)
-                            or (det.confidence < 0.50 and det.ocr_confidence < 0.88)
-                            or (det.confidence * det.ocr_confidence) < 0.18
-                            or det.ocr_confidence < 0.35
+                            det.confidence < 0.08
+                            or (det.confidence < 0.20 and det.ocr_confidence < 0.55)
+                            or (det.confidence < 0.35 and det.ocr_confidence < 0.60)
+                            or (det.confidence < 0.45 and det.ocr_confidence < 0.75)
+                            or (det.confidence * det.ocr_confidence) < 0.08
+                            or det.ocr_confidence < 0.30
                         ):
                             is_non_plate = True
 

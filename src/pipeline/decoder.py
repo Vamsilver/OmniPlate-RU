@@ -438,6 +438,8 @@ class FSMBeamSearchDecoder:
                     reg = text[reg_start:]
                     if is_valid_region(reg):
                         norm_score += 0.25 + REGION_FREQUENCY_WEIGHTS.get(reg, 0.0)
+                        if len(reg) == 3:
+                            norm_score += 0.15 + (REGION_FREQUENCY_WEIGHTS.get(reg, 0.0) * 1.0)
                     else:
                         norm_score -= 3.0
                 candidates.append((text, norm_score))
@@ -469,8 +471,8 @@ class FSMBeamSearchDecoder:
             return []
 
         combined = []
-        for t_text, t_score in top_cands[:min(3, len(top_cands))]:
-            for b_text, b_score in bot_cands[:min(3, len(bot_cands))]:
+        for t_text, t_score in top_cands[:min(4, len(top_cands))]:
+            for b_text, b_score in bot_cands[:min(4, len(bot_cands))]:
                 full_text = t_text + b_text
                 joint_score = (t_score * len(t_text) + b_score * len(b_text)) / float(len(full_text))
                 combined.append((full_text, joint_score))

@@ -2,20 +2,20 @@ validate_dataset.py v1.0 — Волга-IT 2026, полуфинал, номин�
 Датасет: D:\AIProjects\VolgaIT\dataset
 
 == Статистика ==
-Изображений: 6518 (реальных 1518, синтетических 5000, без разметки в meta 0)
-Строк в meta.csv: 6518
-Знаков по типам: {'type1a': 2318, 'type1b': 2306, 'type1': 1621, 'other': 273}
-Реальных изображений по типам: {'type1b': 306, 'other': 273, 'type1': 621, 'type1a': 318}  (рекомендуется {'type1a': 150, 'type1b': 300, 'other': 50})
-Уникальных читаемых ГРЗ (реальные): {'type1b': 300, 'type1': 281, 'type1a': 147, 'other': 39}  (рекомендуется {'type1a': 50, 'type1b': 100})
-Условия съёмки: {'day': 6516, 'angle': 5744, 'motion_blur': 986, 'glare': 2074, 'dirt': 1793, 'night': 2, 'rain': 1, 'snow': 1}
-Лицензии: {'CC-BY-4.0': 5026, 'CC BY 4.0': 770, 'Drive2': 273, 'LGPL 3.0 / CC': 238, 'CC BY-SA 4.0': 85, 'CC0': 55, 'CC BY-SA 3.0': 34, 'Public domain': 13, 'CC BY 3.0': 12, 'CC BY 2.0': 7, 'CC BY-SA 2.0': 3, 'FAL': 2}
-Источники (топ): {'generator_v1': 5000, 'https://www.drive2.ru/r/jdm': 273, 'https://www.kaggle.com/datasets/evgrafovmaxim/nomeroff-ru...': 238, 'https://universe.roboflow.com/new-workspace-fvqqv/russian...': 158, 'russian_car_plates.v2i.yolov8.zip:train/images/Screenshot...': 29, 'russian_car_plates.v2i.yolov8.zip:train/images/-2023-10-1...': 24, 'https://universe.roboflow.com/chernovso/russian_car_plates': 22, 'russian_car_plates.v2i.yolov8.zip:train/images/20230824-2...': 18, 'russian_car_plates.v2i.yolov8.zip:valid/images/Screenshot...': 14, 'russian_car_plates.v2i.yolov8.zip:train/images/-2024-03-2...': 12, 'russian_car_plates.v2i.yolov8.zip:train/images/20230405-1...': 12, 'russian_car_plates.v2i.yolov8.zip:train/images/20230825-1...': 4, 'russian_car_plates.v2i.yolov8.zip:train/images/-2024-04-1...': 3, 'https://upload.wikimedia.org/wikipedia/commons/0/03/Mosco...': 2, 'https://upload.wikimedia.org/wikipedia/commons/6/60/Mosco...': 2}
-Побайтовых дубликатов: 154; совпадений с отладочным набором: 0
+Изображений: 6508 (реальных 1508, синтетических 5000, без разметки в meta 0)
+Строк в meta.csv: 6508
+Знаков по типам: {'type1a': 2167, 'type1b': 2311, 'type1': 1741, 'other': 289}
+Реальных изображений по типам: {'type1b': 311, 'other': 289, 'type1': 741, 'type1a': 167}  (рекомендуется {'type1a': 150, 'type1b': 300, 'other': 50})
+Уникальных читаемых ГРЗ (реальные): {'type1b': 246, 'type1': 477, 'other': 3, 'type1a': 127}  (рекомендуется {'type1a': 50, 'type1b': 100})
+Условия съёмки: {'day': 6506, 'angle': 5953, 'motion_blur': 986, 'glare': 2074, 'dirt': 1793, 'night': 2, 'rain': 1}
+Лицензии: {'CC-BY-4.0': 5046, 'CC BY 4.0': 887, 'LGPL 3.0 / CC': 237, 'Drive2': 115, 'CC BY-SA 4.0': 83, 'CC0': 62, 'CC BY-SA 3.0': 44, 'CC BY 3.0': 17, 'CC BY 2.0': 7, 'Public domain': 5, 'CC BY-SA 2.0': 3, 'FAL': 2}
+Источники (топ): {'generator_v1': 5000, 'https://www.kaggle.com/datasets/evgrafovmaxim/nomeroff-ru...': 237, 'https://universe.roboflow.com/new-workspace-fvqqv/russian...': 138, 'https://www.drive2.ru/r/jdm': 115, 'russian_car_plates.v2i.yolov8.zip:train/images/Screenshot...': 29, 'russian_car_plates.v2i.yolov8.zip:train/images/-2023-10-1...': 24, 'https://universe.roboflow.com/chernovso/russian_car_plates': 22, 'russian_car_plates.v2i.yolov8.zip:train/images/20230824-2...': 18, 'russian_car_plates.v2i.yolov8.zip:valid/images/Screenshot...': 14, 'russian_car_plates.v2i.yolov8.zip:train/images/-2024-03-2...': 12, 'russian_car_plates.v2i.yolov8.zip:train/images/20230405-1...': 12, 'https://upload.wikimedia.org/wikipedia/commons/b/b6/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/7/79/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/7/72/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/8/86/Mosco...': 4}
+Побайтовых дубликатов: 0; совпадений с отладочным набором: 0
 
 == ERROR: 0 ==
 
-== WARNING: 1473 ==
--- meta-license (654)
+== WARNING: 745 ==
+-- meta-license (508)
    [WARNING] meta-license           meta.csv:5009: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5011: лицензия «CC BY 3.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
    [WARNING] meta-license           meta.csv:5018: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
@@ -37,157 +37,52 @@ validate_dataset.py v1.0 — Волга-IT 2026, полуфинал, номин�
    [WARNING] meta-license           meta.csv:5038: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
    [WARNING] meta-license           meta.csv:5040: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5059: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5063: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5064: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5065: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5066: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
-   [WARNING] meta-license           meta.csv:5067: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5065: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
+   [WARNING] meta-license           meta.csv:5066: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5067: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5068: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5069: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5070: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5071: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5076: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   ... ещё 624 (см. JSON-отчёт)
--- meta-bbox (404)
-   [WARNING] meta-bbox              meta.csv:5054: очень маленький знак 1x1 px — проверьте разметку
-   [WARNING] meta-bbox              meta.csv:5055: очень маленький знак 151x1 px — проверьте разметку
-   [WARNING] meta-bbox              meta.csv:5087: очень маленький знак 1x1 px — проверьте разметку
-   [WARNING] meta-bbox              meta.csv:5132: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5533: type1, но соотношение сторон bbox 1.42 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5536: type1, но соотношение сторон bbox 1.61 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5537: type1, но соотношение сторон bbox 1.56 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5573: type1, но соотношение сторон bbox 1.98 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5574: type1, но соотношение сторон bbox 1.16 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5575: type1, но соотношение сторон bbox 1.61 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5577: type1, но соотношение сторон bbox 1.56 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5579: type1, но соотношение сторон bbox 1.33 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5580: type1, но соотношение сторон bbox 1.36 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5581: type1, но соотношение сторон bbox 1.44 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5582: type1, но соотношение сторон bbox 1.42 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5583: type1, но соотношение сторон bbox 1.58 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5585: type1, но соотношение сторон bbox 1.90 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5586: type1, но соотношение сторон bbox 1.64 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5588: type1, но соотношение сторон bbox 1.47 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5589: type1, но соотношение сторон bbox 1.91 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5591: type1, но соотношение сторон bbox 1.83 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5592: type1, но соотношение сторон bbox 1.12 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5593: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5593: type1, но соотношение сторон bbox 1.04 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5594: type1, но соотношение сторон bbox 1.25 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5595: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5595: type1, но соотношение сторон bbox 1.02 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5596: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5596: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5597: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   ... ещё 374 (см. JSON-отчёт)
--- labels (246)
-   [WARNING] labels                 labels/real_other_0005.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0005.jpg
-   [WARNING] labels                 labels/real_other_0007.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0007.jpg
-   [WARNING] labels                 labels/real_other_0009.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0009.jpg
-   [WARNING] labels                 labels/real_other_0010.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0010.jpg
-   [WARNING] labels                 labels/real_other_0011.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0011.jpg
-   [WARNING] labels                 labels/real_other_0013.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0013.jpg
-   [WARNING] labels                 labels/real_other_0015.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0015.jpg
-   [WARNING] labels                 labels/real_other_0016.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0016.jpg
-   [WARNING] labels                 labels/real_other_0017.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0017.jpg
-   [WARNING] labels                 labels/real_other_0018.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0018.jpg
-   [WARNING] labels                 labels/real_other_0019.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0019.jpg
-   [WARNING] labels                 labels/real_other_0020.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0020.jpg
-   [WARNING] labels                 labels/real_other_0021.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0021.jpg
-   [WARNING] labels                 labels/real_other_0023.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0023.jpg
-   [WARNING] labels                 labels/real_other_0026.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0026.jpg
-   [WARNING] labels                 labels/real_other_0027.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0027.jpg
-   [WARNING] labels                 labels/real_other_0028.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0028.jpg
-   [WARNING] labels                 labels/real_other_0029.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0029.jpg
-   [WARNING] labels                 labels/real_other_0030.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0030.jpg
-   [WARNING] labels                 labels/real_other_0031.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0031.jpg
-   [WARNING] labels                 labels/real_other_0032.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0032.jpg
-   [WARNING] labels                 labels/real_other_0033.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0033.jpg
-   [WARNING] labels                 labels/real_other_0038.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0038.jpg
-   [WARNING] labels                 labels/real_other_0040.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0040.jpg
-   [WARNING] labels                 labels/real_other_0041.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0041.jpg
-   [WARNING] labels                 labels/real_other_0044.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0044.jpg
-   [WARNING] labels                 labels/real_other_0045.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0045.jpg
-   [WARNING] labels                 labels/real_other_0046.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0046.jpg
-   [WARNING] labels                 labels/real_other_0054.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0054.jpg
-   [WARNING] labels                 labels/real_other_0056.txt: 0 строк в разметке, но 1 строк в meta.csv для images/real/real_other_0056.jpg
-   ... ещё 216 (см. JSON-отчёт)
--- meta-quad (89)
-   [WARNING] meta-quad              meta.csv:5005: bbox [758, 613, 108, 30] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5006: bbox [302, 747, 123, 30] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5008: bbox [821, 712, 140, 38] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5009: bbox [285, 744, 81, 26] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5015: bbox [819, 687, 120, 35] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5020: bbox [897, 735, 111, 36] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5021: bbox [295, 624, 123, 37] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5022: bbox [378, 681, 97, 25] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5024: bbox [790, 687, 81, 26] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5026: bbox [622, 776, 204, 47] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5027: bbox [412, 542, 135, 42] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5029: bbox [698, 458, 581, 462] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5032: bbox [188, 0, 728, 405] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5033: bbox [1119, 0, 160, 180] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5036: bbox [825, 195, 446, 435] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5038: bbox [656, 0, 103, 97] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5039: bbox [701, 161, 578, 458] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5040: bbox [1080, 617, 199, 235] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5042: bbox [1208, 139, 71, 108] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5044: bbox [635, 182, 640, 517] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5046: bbox [693, 453, 578, 402] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5047: bbox [718, 395, 492, 386] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5048: bbox [3, 484, 460, 369] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5050: bbox [791, 349, 436, 438] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5051: bbox [644, 447, 550, 398] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5053: bbox [0, 728, 80, 55] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5061: bbox [420, 354, 42, 24] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5062: bbox [1123, 1, 154, 133] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5063: bbox [577, 0, 228, 235] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   [WARNING] meta-quad              meta.csv:5064: bbox [763, 298, 478, 374] не согласован с quad (IoU < 0.8) — bbox должен описывать quad
-   ... ещё 59 (см. JSON-отчёт)
--- duplicate-image (72)
-   [WARNING] duplicate-image        images/real/real_other_0054.jpg: побайтовые дубликаты: images/real/real_other_0072.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0277.jpg: побайтовые дубликаты: images/real/real_type1a_0284.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0278.jpg: побайтовые дубликаты: images/real/real_type1a_0287.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0279.jpg: побайтовые дубликаты: images/real/real_type1a_0289.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0491.jpg: побайтовые дубликаты: images/real/real_type1a_0492.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0522.jpg: побайтовые дубликаты: images/real/real_type1a_0524.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0548.jpg: побайтовые дубликаты: images/real/real_type1a_0550.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0708.jpg: побайтовые дубликаты: images/real/real_type1a_0710.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0718.jpg: побайтовые дубликаты: images/real/real_type1a_0743.jpg, images/real/real_type1a_0744.jpg, images/real/real_type1a_0745.jpg, images/real/real_type1a_0895.jpg, images/real/real_type1a_0896.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0719.jpg: побайтовые дубликаты: images/real/real_type1a_0728.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0720.jpg: побайтовые дубликаты: images/real/real_type1a_0789.jpg, images/real/real_type1a_0790.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0721.jpg: побайтовые дубликаты: images/real/real_type1a_0747.jpg, images/real/real_type1a_0764.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0722.jpg: побайтовые дубликаты: images/real/real_type1a_0792.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0723.jpg: побайтовые дубликаты: images/real/real_type1a_0732.jpg, images/real/real_type1a_0832.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0724.jpg: побайтовые дубликаты: images/real/real_type1a_0730.jpg, images/real/real_type1a_0731.jpg, images/real/real_type1a_0848.jpg, images/real/real_type1a_0849.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0725.jpg: побайтовые дубликаты: images/real/real_type1a_0727.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0726.jpg: побайтовые дубликаты: images/real/real_type1a_0729.jpg, images/real/real_type1a_0754.jpg, images/real/real_type1a_0850.jpg, images/real/real_type1a_0853.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0733.jpg: побайтовые дубликаты: images/real/real_type1a_0734.jpg, images/real/real_type1a_0735.jpg, images/real/real_type1a_0835.jpg, images/real/real_type1a_0837.jpg, images/real/real_type1a_0982.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0736.jpg: побайтовые дубликаты: images/real/real_type1a_0737.jpg, images/real/real_type1a_0838.jpg, images/real/real_type1a_0840.jpg, images/real/real_type1a_0841.jpg, images/real/real_type1a_0842.jpg, images/real/real_type1a_0843.jpg, images/real/real_type1a_0844.jpg, images/real/real_type1a_0845.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0738.jpg: побайтовые дубликаты: images/real/real_type1a_0781.jpg, images/real/real_type1a_0851.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0739.jpg: побайтовые дубликаты: images/real/real_type1a_0755.jpg, images/real/real_type1a_0782.jpg, images/real/real_type1a_0868.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0740.jpg: побайтовые дубликаты: images/real/real_type1a_0741.jpg, images/real/real_type1a_0880.jpg, images/real/real_type1a_0928.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0742.jpg: побайтовые дубликаты: images/real/real_type1a_0756.jpg, images/real/real_type1a_0867.jpg, images/real/real_type1a_0879.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0746.jpg: побайтовые дубликаты: images/real/real_type1a_0763.jpg, images/real/real_type1a_0783.jpg, images/real/real_type1a_0958.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0748.jpg: побайтовые дубликаты: images/real/real_type1a_0749.jpg, images/real/real_type1a_0750.jpg, images/real/real_type1a_0872.jpg, images/real/real_type1a_0977.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0751.jpg: побайтовые дубликаты: images/real/real_type1a_0752.jpg, images/real/real_type1a_0765.jpg, images/real/real_type1a_0875.jpg, images/real/real_type1a_0897.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0753.jpg: побайтовые дубликаты: images/real/real_type1a_0766.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0757.jpg: побайтовые дубликаты: images/real/real_type1a_0758.jpg, images/real/real_type1a_0760.jpg, images/real/real_type1a_0986.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0759.jpg: побайтовые дубликаты: images/real/real_type1a_0761.jpg, images/real/real_type1a_0767.jpg
-   [WARNING] duplicate-image        images/real/real_type1a_0762.jpg: побайтовые дубликаты: images/real/real_type1a_0768.jpg, images/real/real_type1a_0811.jpg
-   ... ещё 42 (см. JSON-отчёт)
--- meta-plate (8)
-   [WARNING] meta-plate             meta.csv:5541: plate_type=other, но номер «X606AB71» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:5545: plate_type=other, но номер «K069XK70» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:5546: plate_type=other, но номер «Y079XA57» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:5554: plate_type=other, но номер «O032TE68» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:6280: plate_type=other, но номер «O220EO92» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:6300: plate_type=other, но номер «M100HO07» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:6305: plate_type=other, но номер «C051OO75» выглядит как обычный знак типа 1 — проверьте тип
-   [WARNING] meta-plate             meta.csv:6331: plate_type=other, но номер «E420HA10» выглядит как обычный знак типа 1 — проверьте тип
+   [WARNING] meta-license           meta.csv:5075: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   ... ещё 478 (см. JSON-отчёт)
+-- meta-bbox (237)
+   [WARNING] meta-bbox              meta.csv:5054: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
+   [WARNING] meta-bbox              meta.csv:5130: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
+   [WARNING] meta-bbox              meta.csv:5156: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5510: type1, но соотношение сторон bbox 1.20 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5512: type1, но соотношение сторон bbox 1.61 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5513: type1, но соотношение сторон bbox 1.56 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5546: type1, но соотношение сторон bbox 1.76 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5547: type1, но соотношение сторон bbox 1.16 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5550: type1, но соотношение сторон bbox 1.33 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5551: type1, но соотношение сторон bbox 1.36 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5552: type1, но соотношение сторон bbox 1.44 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5553: type1, но соотношение сторон bbox 1.42 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5554: type1, но соотношение сторон bbox 1.58 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5556: type1, но соотношение сторон bbox 1.90 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5557: type1, но соотношение сторон bbox 1.64 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5558: type1, но соотношение сторон bbox 1.70 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5559: type1, но соотношение сторон bbox 1.47 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5560: type1, но соотношение сторон bbox 1.91 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5562: type1, но соотношение сторон bbox 1.83 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5563: type1, но соотношение сторон bbox 1.12 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5564: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
+   [WARNING] meta-bbox              meta.csv:5564: type1, но соотношение сторон bbox 1.04 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5565: type1, но соотношение сторон bbox 1.25 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5566: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
+   [WARNING] meta-bbox              meta.csv:5566: type1, но соотношение сторон bbox 1.02 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5567: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
+   [WARNING] meta-bbox              meta.csv:5567: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5568: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
+   [WARNING] meta-bbox              meta.csv:5568: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5570: type1, но соотношение сторон bbox 1.44 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   ... ещё 207 (см. JSON-отчёт)
 
 Напоминание (проверяется жюри вручную): лица людей размыты; нет кадров, где человек — смысловой центр;
 материалы получены легально (п. 6.3); разметка не сфальсифицирована (п. 8).
 
-ИТОГ: валидация ПРОЙДЕНА с предупреждениями. Ошибок: 0, предупреждений: 1473.
+ИТОГ: валидация ПРОЙДЕНА с предупреждениями. Ошибок: 0, предупреждений: 745.
 
 Отчёт сохранён: D:\AIProjects\VolgaIT\validation_report.txt

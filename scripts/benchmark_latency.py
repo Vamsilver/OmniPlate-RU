@@ -101,7 +101,7 @@ def run_benchmark(
     # Locate real reference plate image for resolution profiling
     ref_img = None
     if real_images_dir and os.path.exists(real_images_dir):
-        for candidate in ["real_type1a_0096.jpg", "real_type1b_0420.jpg", "real_type1a_0121.jpg", "real_type1b_0478.jpg"]:
+        for candidate in ["real_type1a_0001.jpg", "real_type1b_0001.jpg", "real_type1_0001.jpg", "real_type1a_0096.jpg", "real_type1b_0420.jpg"]:
             cand_p = os.path.join(real_images_dir, candidate)
             if os.path.exists(cand_p):
                 ref_img = cv2.imread(cand_p)

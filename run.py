@@ -222,9 +222,22 @@ def run_inference(
                 if len(detections) > 1:
                     def det_sort_key(d: PlateDetection):
                         is_target = 1 if d.plate_type in ("type1", "type1a", "type1b") else 0
-                        real_chars = len([c for c in (d.text or "") if c != "#"])
-                        return (is_target, real_chars > 0, real_chars, d.ocr_confidence, d.confidence)
+                        has_text = 1 if d.text and "#" not in d.text else 0
+                        # Weight OCR confidence more heavily than detection box confidence
+                        quality = (d.confidence ** 0.5) * (d.ocr_confidence ** 2)
+                        return (is_target, has_text, quality, d.confidence)
                     detections = sorted(detections, key=det_sort_key, reverse=True)
+
+                    # Suppress weak secondary background vehicles to avoid false positive lines
+                    best_d = detections[0]
+                    best_area = (best_d.bbox[2] * best_d.bbox[3]) if best_d.bbox and len(best_d.bbox) == 4 else 1.0
+                    best_q = (best_d.confidence ** 0.5) * (best_d.ocr_confidence ** 2)
+                    for sec in detections[1:]:
+                        sec_area = (sec.bbox[2] * sec.bbox[3]) if sec.bbox and len(sec.bbox) == 4 else 1.0
+                        sec_q = (sec.confidence ** 0.5) * (sec.ocr_confidence ** 2)
+                        if sec.confidence < 0.60 or sec_q < 0.60 * best_q or sec_area < 0.40 * best_area or sec.ocr_confidence < 0.80:
+                            sec.plate_type = "other"
+                            sec.text = ""
 
                 for det in detections:
                     conf_val = round(det.confidence, 2)
