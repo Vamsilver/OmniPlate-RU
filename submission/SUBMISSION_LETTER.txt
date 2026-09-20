@@ -16,14 +16,14 @@
      Ветка: main (последний коммит полностью синхронизирован).
 
 1.2. Архив решения с кодом и 5 готовыми ONNX-моделями:
-     Файл:    OmniPlate-RU_solution.zip (15.72 МБ при лимите < 20 МБ SLA)
-     SHA-256: 250fe29ef23956be2edf747ddd865f55cc4f6e8de72d88fc2e47fcae3c00ba8c
+     Файл:    OmniPlate-RU_solution.zip (15.73 МБ при лимите < 20 МБ SLA)
+     SHA-256: 0b4dedef324164f0f1f965fc468c82aa428636b8e3dc2c22f45b703a3f8f8102
      Ссылка:  [Прикреплен к письму / https://github.com/Vamsilver/OmniPlate-RU/releases/latest]
 
 1.3. Полный архив размеченного датасета:
-     Файл:    OmniPlate-RU_dataset.zip (1039.61 МБ)
-     SHA-256: a47a35f07fe8b70468879e099378283570ac5da114eb8c1a94332d0f0a104c7b
-     Состав:  6508 аннотаций (5000 процедурная синтетика + 1508 реальных дорожных кадров)
+     Файл:    OmniPlate-RU_dataset.zip (1033.48 МБ)
+     SHA-256: 3452916f088158a2126586e9ca6669462cca13c2b0aa91f0348cd81fdf144169
+     Состав:  6397 аннотаций (5000 процедурная синтетика + 1397 реальных дорожных кадров)
      Ссылка на облачный диск (Google Drive):
      https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 

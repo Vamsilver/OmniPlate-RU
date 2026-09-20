@@ -2,19 +2,19 @@ validate_dataset.py v1.0 — Волга-IT 2026, полуфинал, номин�
 Датасет: D:\AIProjects\VolgaIT\dataset
 
 == Статистика ==
-Изображений: 6508 (реальных 1508, синтетических 5000, без разметки в meta 0)
-Строк в meta.csv: 6508
-Знаков по типам: {'type1a': 2167, 'type1b': 2311, 'type1': 1741, 'other': 289}
-Реальных изображений по типам: {'type1b': 311, 'other': 289, 'type1': 741, 'type1a': 167}  (рекомендуется {'type1a': 150, 'type1b': 300, 'other': 50})
-Уникальных читаемых ГРЗ (реальные): {'type1b': 246, 'type1': 477, 'other': 3, 'type1a': 127}  (рекомендуется {'type1a': 50, 'type1b': 100})
-Условия съёмки: {'day': 6506, 'angle': 5953, 'motion_blur': 986, 'glare': 2074, 'dirt': 1793, 'night': 2, 'rain': 1}
-Лицензии: {'CC-BY-4.0': 5046, 'CC BY 4.0': 887, 'LGPL 3.0 / CC': 237, 'Drive2': 115, 'CC BY-SA 4.0': 83, 'CC0': 62, 'CC BY-SA 3.0': 44, 'CC BY 3.0': 17, 'CC BY 2.0': 7, 'Public domain': 5, 'CC BY-SA 2.0': 3, 'FAL': 2}
-Источники (топ): {'generator_v1': 5000, 'https://www.kaggle.com/datasets/evgrafovmaxim/nomeroff-ru...': 237, 'https://universe.roboflow.com/new-workspace-fvqqv/russian...': 138, 'https://www.drive2.ru/r/jdm': 115, 'russian_car_plates.v2i.yolov8.zip:train/images/Screenshot...': 29, 'russian_car_plates.v2i.yolov8.zip:train/images/-2023-10-1...': 24, 'https://universe.roboflow.com/chernovso/russian_car_plates': 22, 'russian_car_plates.v2i.yolov8.zip:train/images/20230824-2...': 18, 'russian_car_plates.v2i.yolov8.zip:valid/images/Screenshot...': 14, 'russian_car_plates.v2i.yolov8.zip:train/images/-2024-03-2...': 12, 'russian_car_plates.v2i.yolov8.zip:train/images/20230405-1...': 12, 'https://upload.wikimedia.org/wikipedia/commons/b/b6/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/7/79/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/7/72/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/8/86/Mosco...': 4}
+Изображений: 6397 (реальных 1397, синтетических 5000, без разметки в meta 0)
+Строк в meta.csv: 6397
+Знаков по типам: {'type1a': 2167, 'type1b': 2311, 'type1': 1630, 'other': 289}
+Реальных изображений по типам: {'type1b': 311, 'other': 289, 'type1': 630, 'type1a': 167}  (рекомендуется {'type1a': 150, 'type1b': 300, 'other': 50})
+Уникальных читаемых ГРЗ (реальные): {'type1b': 246, 'type1': 420, 'other': 3, 'type1a': 127}  (рекомендуется {'type1a': 50, 'type1b': 100})
+Условия съёмки: {'day': 6395, 'angle': 5931, 'motion_blur': 986, 'glare': 2074, 'dirt': 1793, 'night': 2, 'rain': 1}
+Лицензии: {'CC-BY-4.0': 5044, 'CC BY 4.0': 779, 'LGPL 3.0 / CC': 237, 'Drive2': 115, 'CC BY-SA 4.0': 83, 'CC0': 61, 'CC BY-SA 3.0': 44, 'CC BY 3.0': 17, 'CC BY 2.0': 7, 'Public domain': 5, 'CC BY-SA 2.0': 3, 'FAL': 2}
+Источники (топ): {'generator_v1': 5000, 'https://www.kaggle.com/datasets/evgrafovmaxim/nomeroff-ru...': 237, 'https://universe.roboflow.com/new-workspace-fvqqv/russian...': 138, 'https://www.drive2.ru/r/jdm': 115, 'russian_car_plates.v2i.yolov8.zip:train/images/Screenshot...': 29, 'https://universe.roboflow.com/chernovso/russian_car_plates': 18, 'russian_car_plates.v2i.yolov8.zip:train/images/-2023-10-1...': 18, 'russian_car_plates.v2i.yolov8.zip:valid/images/Screenshot...': 14, 'https://upload.wikimedia.org/wikipedia/commons/b/b6/Mosco...': 5, 'russian_car_plates.v2i.yolov8.zip:train/images/-2024-03-2...': 5, 'russian_car_plates.v2i.yolov8.zip:train/images/20230824-2...': 5, 'https://upload.wikimedia.org/wikipedia/commons/7/72/Mosco...': 5, 'https://upload.wikimedia.org/wikipedia/commons/8/86/Mosco...': 4, 'https://upload.wikimedia.org/wikipedia/commons/0/03/Mosco...': 4, 'https://upload.wikimedia.org/wikipedia/commons/d/da/Mosco...': 4}
 Побайтовых дубликатов: 0; совпадений с отладочным набором: 0
 
 == ERROR: 0 ==
 
-== WARNING: 745 ==
+== WARNING: 625 ==
 -- meta-license (508)
    [WARNING] meta-license           meta.csv:5009: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5011: лицензия «CC BY 3.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
@@ -36,51 +36,51 @@ validate_dataset.py v1.0 — Волга-IT 2026, полуфинал, номин�
    [WARNING] meta-license           meta.csv:5037: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
    [WARNING] meta-license           meta.csv:5038: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
    [WARNING] meta-license           meta.csv:5040: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5059: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5058: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5062: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5063: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5064: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5065: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
-   [WARNING] meta-license           meta.csv:5066: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5064: лицензия «CC BY 2.0» не распознана — укажите SPDX-идентификатор (CC0-1.0, CC-BY-4.0) или own_photo
+   [WARNING] meta-license           meta.csv:5065: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5066: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5067: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5068: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    [WARNING] meta-license           meta.csv:5069: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5070: лицензия «CC BY-SA 3.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
-   [WARNING] meta-license           meta.csv:5075: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
+   [WARNING] meta-license           meta.csv:5074: лицензия «CC BY-SA 4.0» ShareAlike: перелицензирование под CC BY 4.0 невозможно — жюри проверит
    ... ещё 478 (см. JSON-отчёт)
--- meta-bbox (237)
-   [WARNING] meta-bbox              meta.csv:5054: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5130: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5156: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5510: type1, но соотношение сторон bbox 1.20 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5512: type1, но соотношение сторон bbox 1.61 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5513: type1, но соотношение сторон bbox 1.56 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5546: type1, но соотношение сторон bbox 1.76 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5547: type1, но соотношение сторон bbox 1.16 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5550: type1, но соотношение сторон bbox 1.33 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5551: type1, но соотношение сторон bbox 1.36 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5552: type1, но соотношение сторон bbox 1.44 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5553: type1, но соотношение сторон bbox 1.42 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5554: type1, но соотношение сторон bbox 1.58 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5556: type1, но соотношение сторон bbox 1.90 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5557: type1, но соотношение сторон bbox 1.64 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5558: type1, но соотношение сторон bbox 1.70 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5559: type1, но соотношение сторон bbox 1.47 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5560: type1, но соотношение сторон bbox 1.91 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5562: type1, но соотношение сторон bbox 1.83 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5563: type1, но соотношение сторон bbox 1.12 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5564: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5564: type1, но соотношение сторон bbox 1.04 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5565: type1, но соотношение сторон bbox 1.25 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5566: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5566: type1, но соотношение сторон bbox 1.02 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5567: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5567: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5568: bbox занимает почти весь кадр — это кроп знака, а не кадр с камеры?
-   [WARNING] meta-bbox              meta.csv:5568: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   [WARNING] meta-bbox              meta.csv:5570: type1, но соотношение сторон bbox 1.44 — однострочный знак обычно ≥ 2.5 (перспектива?)
-   ... ещё 207 (см. JSON-отчёт)
+-- meta-bbox (117)
+   [WARNING] meta-bbox              meta.csv:5151: type1, но соотношение сторон bbox 1.00 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5505: type1, но соотношение сторон bbox 1.20 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5506: type1, но соотношение сторон bbox 1.61 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5542: type1, но соотношение сторон bbox 1.90 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5543: type1, но соотношение сторон bbox 1.47 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5544: type1, но соотношение сторон bbox 1.91 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5546: type1, но соотношение сторон bbox 1.83 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5548: type1, но соотношение сторон bbox 1.44 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5550: type1, но соотношение сторон bbox 1.77 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5552: type1, но соотношение сторон bbox 1.58 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5553: type1, но соотношение сторон bbox 1.34 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5554: type1, но соотношение сторон bbox 1.82 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5561: type1, но соотношение сторон bbox 1.92 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5563: type1, но соотношение сторон bbox 1.42 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5564: type1, но соотношение сторон bbox 1.51 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5565: type1, но соотношение сторон bbox 1.08 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5566: type1, но соотношение сторон bbox 0.97 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5567: type1, но соотношение сторон bbox 1.54 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5570: type1, но соотношение сторон bbox 1.90 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5571: type1, но соотношение сторон bbox 1.90 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5575: type1, но соотношение сторон bbox 1.84 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5576: type1, но соотношение сторон bbox 1.38 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5578: type1, но соотношение сторон bbox 1.93 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5579: type1, но соотношение сторон bbox 1.38 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5580: type1, но соотношение сторон bbox 0.75 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5581: type1, но соотношение сторон bbox 0.82 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5582: type1, но соотношение сторон bbox 0.76 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5583: type1, но соотношение сторон bbox 1.61 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5584: type1, но соотношение сторон bbox 1.03 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   [WARNING] meta-bbox              meta.csv:5585: type1, но соотношение сторон bbox 1.16 — однострочный знак обычно ≥ 2.5 (перспектива?)
+   ... ещё 87 (см. JSON-отчёт)
 
 Напоминание (проверяется жюри вручную): лица людей размыты; нет кадров, где человек — смысловой центр;
 материалы получены легально (п. 6.3); разметка не сфальсифицирована (п. 8).
 
-ИТОГ: валидация ПРОЙДЕНА с предупреждениями. Ошибок: 0, предупреждений: 745.
+ИТОГ: валидация ПРОЙДЕНА с предупреждениями. Ошибок: 0, предупреждений: 625.

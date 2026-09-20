@@ -61,7 +61,7 @@ class PlateRenderer:
     @staticmethod
     def generate_random_plate_text() -> Tuple[str, str, str, str, str]:
         l1 = random.choice(ALLOWED_LETTERS)
-        d3 = "".join(random.choices(DIGITS, k=3))
+        d3 = f"{random.randint(1, 999):03d}"
         l2 = "".join(random.choices(ALLOWED_LETTERS, k=2))
         region = random.choice(POPULAR_REGIONS)
         full_str = f"{l1}{d3}{l2}{region}"
@@ -121,7 +121,7 @@ class PlateRenderer:
     @staticmethod
     def generate_random_bus_plate_text() -> Tuple[str, str, str, str]:
         l2 = "".join(random.choices(ALLOWED_LETTERS, k=2))
-        d3 = "".join(random.choices(DIGITS, k=3))
+        d3 = f"{random.randint(1, 999):03d}"
         region = random.choice(POPULAR_REGIONS)
         full_str = f"{l2}{d3}{region}"
         return full_str, l2, d3, region

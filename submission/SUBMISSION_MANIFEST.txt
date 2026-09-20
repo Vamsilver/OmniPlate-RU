@@ -1,7 +1,7 @@
 ======================================================================
 OMNIPLATE-RU: SUBMISSION MANIFEST (VOLGA IT 2026)
 ======================================================================
-Generated:           2026-09-20 15:36:04
+Generated:           2026-09-20 15:47:38
 Target Competition:  Volga IT 2026 (Semi-Final)
 Track:               AI & Data Analysis (AIS Gorod)
 Participant/Author:  Васильев Роман Алексеевич (соло-участник / 1 человек)
@@ -10,13 +10,13 @@ Repository:          https://github.com/Vamsilver/OmniPlate-RU
 ARCHIVES SUMMARY:
   1. Solution Archive:
      File:           OmniPlate-RU_solution.zip
-     Size:           15.73 MB (< 20 MB SLA)
-     SHA-256:        0b4dedef324164f0f1f965fc468c82aa428636b8e3dc2c22f45b703a3f8f8102
+     Size:           15.74 MB (< 20 MB SLA)
+     SHA-256:        7948b8bb6575ac7a332d8705a4c4e80df23d4bae4f284649054d1708e0a932eb
 
   2. Dataset Archive:
      File:           OmniPlate-RU_dataset.zip
-     Size:           1039.61 MB
-     SHA-256:        a47a35f07fe8b70468879e099378283570ac5da114eb8c1a94332d0f0a104c7b
+     Size:           1033.48 MB
+     SHA-256:        3452916f088158a2126586e9ca6669462cca13c2b0aa91f0348cd81fdf144169
      Cloud Link:     https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 ----------------------------------------------------------------------
 MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):
@@ -28,6 +28,6 @@ MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):
 ----------------------------------------------------------------------
 DATASET METADATA:
   File:           dataset/meta.csv
-  Total Rows:     6508 (5000 Synthetic + 1508 Real)
-  SHA-256:        ae764ed443f7b7d1097640a60c5471ebeefdeebecbc83376c86a23bfb6da0e20
+  Total Rows:     6397 (5000 Synthetic + 1397 Real)
+  SHA-256:        2a151865a247b306be2d75c3a25e69747fed3bbca7ccbca3280d0b8f808a90e5
 ======================================================================
