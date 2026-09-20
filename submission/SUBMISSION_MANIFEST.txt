@@ -1,7 +1,7 @@
 ======================================================================
 OMNIPLATE-RU: SUBMISSION MANIFEST (VOLGA IT 2026)
 ======================================================================
-Generated:           2026-09-20 15:47:38
+Generated:           2026-09-20 15:53:36
 Target Competition:  Volga IT 2026 (Semi-Final)
 Track:               AI & Data Analysis (AIS Gorod)
 Participant/Author:  Васильев Роман Алексеевич (соло-участник / 1 человек)
@@ -11,12 +11,12 @@ ARCHIVES SUMMARY:
   1. Solution Archive:
      File:           OmniPlate-RU_solution.zip
      Size:           15.74 MB (< 20 MB SLA)
-     SHA-256:        7948b8bb6575ac7a332d8705a4c4e80df23d4bae4f284649054d1708e0a932eb
+     SHA-256:        fbc586c9642f33ed4b8a2ae1dec436144a651a0a6904b31b8fb74f3a360697bc
 
   2. Dataset Archive:
      File:           OmniPlate-RU_dataset.zip
      Size:           1033.48 MB
-     SHA-256:        3452916f088158a2126586e9ca6669462cca13c2b0aa91f0348cd81fdf144169
+     SHA-256:        ee10a1e24930902985efbe3248bfd67028b23249835764f0d3ec75d9df3762ba
      Cloud Link:     https://drive.google.com/drive/folders/1v_iE6-R2ivM38Rb-4fZTvAN4LN3QYj7A?usp=sharing
 ----------------------------------------------------------------------
 MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):
@@ -29,5 +29,5 @@ MODEL ARTIFACTS (ONNX FP16/INT8, 100% OFFLINE):
 DATASET METADATA:
   File:           dataset/meta.csv
   Total Rows:     6397 (5000 Synthetic + 1397 Real)
-  SHA-256:        2a151865a247b306be2d75c3a25e69747fed3bbca7ccbca3280d0b8f808a90e5
+  SHA-256:        31d02c15e0650cdd3f611b937506dd5b33f891ffb21a32c778ba9b7519d18b62
 ======================================================================
