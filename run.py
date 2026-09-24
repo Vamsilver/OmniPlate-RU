@@ -38,6 +38,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.pipeline.pipeline import OmniPlatePipeline, PlateDetection
+from src.pipeline.decoder import is_valid_gost_plate
 
 # Supported image extensions
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
@@ -228,14 +229,13 @@ def run_inference(
                         return (is_target, has_text, quality, d.confidence)
                     detections = sorted(detections, key=det_sort_key, reverse=True)
 
-                    # Suppress weak secondary background vehicles to avoid false positive lines
-                    best_d = detections[0]
-                    best_area = (best_d.bbox[2] * best_d.bbox[3]) if best_d.bbox and len(best_d.bbox) == 4 else 1.0
-                    best_q = (best_d.confidence ** 0.5) * (best_d.ocr_confidence ** 2)
+                    # Keep valid GOST secondary detections while suppressing unconfident background noise
                     for sec in detections[1:]:
-                        sec_area = (sec.bbox[2] * sec.bbox[3]) if sec.bbox and len(sec.bbox) == 4 else 1.0
-                        sec_q = (sec.confidence ** 0.5) * (sec.ocr_confidence ** 2)
-                        if sec.confidence < 0.60 or sec_q < 0.60 * best_q or sec_area < 0.40 * best_area or sec.ocr_confidence < 0.80:
+                        is_valid = bool(sec.text and is_valid_gost_plate(sec.text, sec.plate_type, allow_wildcards=False))
+                        if is_valid and sec.ocr_confidence >= 0.70:
+                            # Confident valid GOST secondary plate (e.g. Type 1 on nearby vehicle)
+                            pass
+                        else:
                             sec.plate_type = "other"
                             sec.text = ""
 
@@ -244,6 +244,12 @@ def run_inference(
                     # Strictly adhere to competition classes: type1, type1a, type1b, other
                     out_type = "other" if det.plate_type in ("type2", "other") else det.plate_type
                     raw_text = (det.text or "").strip().upper()
+
+                    # Filter low OCR confidence or low det+ocr confidence (eliminates false positives like img_030)
+                    if out_type != "other" and (det.ocr_confidence < 0.60 or (det.confidence < 0.50 and det.ocr_confidence < 0.85)):
+                        out_type = "other"
+                        raw_text = ""
+
                     plate_text = raw_text if raw_text else ("" if out_type == "other" else "########")
 
                     writer.writerow([

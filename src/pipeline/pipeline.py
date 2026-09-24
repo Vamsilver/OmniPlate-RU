@@ -703,6 +703,30 @@ class OmniPlatePipeline:
                             text_1a, conf_1a = text_1a_nat, conf_1a_nat
                         else:
                             text_1a, conf_1a = text_1a_dp, conf_1a_dp
+
+                        # Evaluate stitched 1D candidate and contrast-enhanced candidate
+                        stitched_1a = self.rectifier.stitch_type1a_horizontal(top_l, bot_l, target_size=(160, 36))
+                        text_1a_ss, conf_1a_ss = self.ocr.predict_single(stitched_1a, plate_type="type1a")
+                        v_ss = is_valid_gost_plate(text_1a_ss, "type1a")
+
+                        # Adaptive CLAHE for dark/washed-out plates
+                        gray_1a = cv2.cvtColor(rect_1a, cv2.COLOR_BGR2GRAY)
+                        if gray_1a.std() < 25.0:
+                            lab_1a = cv2.cvtColor(rect_1a, cv2.COLOR_BGR2LAB)
+                            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                            lab_1a[:, :, 0] = clahe.apply(lab_1a[:, :, 0])
+                            enh_1a = cv2.cvtColor(lab_1a, cv2.COLOR_LAB2BGR)
+                            m_enh = self.rectifier.find_adaptive_split_seam(enh_1a)
+                            s_enh = self.rectifier.stitch_type1a_horizontal(enh_1a[:m_enh, :], enh_1a[m_enh:, :], target_size=(160, 36))
+                            t_enh, c_enh = self.ocr.predict_single(s_enh, plate_type="type1a")
+                            v_enh = is_valid_gost_plate(t_enh, "type1a")
+                            if v_enh and c_enh >= conf_1a_ss:
+                                text_1a_ss, conf_1a_ss, v_ss = t_enh, c_enh, v_enh
+
+                        score_curr = conf_1a * 10.0 + (4.0 if is_valid_gost_plate(text_1a, "type1a") else 0.0) - text_1a.count("#") * 3.5
+                        score_ss = conf_1a_ss * 10.0 + (4.0 if v_ss else 0.0) - text_1a_ss.count("#") * 3.5
+                        if v_ss and conf_1a_ss >= 0.85 and score_ss > score_curr + 1.0:
+                            text_1a, conf_1a = text_1a_ss, conf_1a_ss
                     elif has_native:
                         text_1a, conf_1a = self.ocr.predict_type1a_native(rect_1a)
                     else:

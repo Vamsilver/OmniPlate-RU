@@ -95,6 +95,7 @@ real_*.jpg
 test_output/
 .jobs/
 submission/*.zip
-results_new_ocr.csv
+results*.csv
+details*.csv
 
 
